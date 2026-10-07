@@ -1,0 +1,2030 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UNO 决策助手</title>
+<style>
+  :root{
+    --bg:#0e151d; --panel:#16202b; --panel2:#1d2a37; --line:#2a3a4a;
+    --tx:#e9eff6; --mut:#8ea6bd; --acc:#ffd23f;
+    --R:#d93b31; --Y:#e0a413; --G:#2f9e44; --B:#2f6fd0;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:radial-gradient(1200px 700px at 20% -10%, #17293a 0%, var(--bg) 55%) fixed;
+    color:var(--tx); font:14px/1.5 "Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    padding:14px 14px 60px;
+  }
+  h1{font-size:19px;margin:0 0 10px}
+  h1 small{font-size:12px;color:var(--mut);font-weight:400;margin-left:8px}
+  h2{font-size:13px;margin:0 0 8px;color:var(--acc);letter-spacing:.06em;font-weight:700}
+  main{display:grid;grid-template-columns:minmax(400px,1.15fr) minmax(360px,1fr);gap:14px;align-items:start}
+  @media (max-width:960px){ main{grid-template-columns:1fr} }
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+  .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .row+.row{margin-top:8px}
+  .sp{flex:1}
+
+  /* ---- 牌 ---- */
+  .chip{
+    display:inline-flex;align-items:center;justify-content:center;gap:4px;
+    min-width:34px;height:34px;padding:0 7px;border-radius:8px;
+    font-weight:800;font-size:14px;color:#fff;letter-spacing:.02em;
+    text-shadow:0 1px 2px rgba(0,0,0,.5);
+    border:2px solid rgba(255,255,255,.22);cursor:pointer;user-select:none;
+    box-shadow:0 2px 0 rgba(0,0,0,.35);transition:transform .06s,box-shadow .06s;
+  }
+  .chip:hover{transform:translateY(-1px);box-shadow:0 4px 8px rgba(0,0,0,.4)}
+  .chip.sm{min-width:28px;height:28px;font-size:12px;border-radius:6px;border-width:1.5px;box-shadow:0 1px 0 rgba(0,0,0,.35)}
+  .chip.lg{min-width:58px;height:80px;font-size:16px;border-radius:10px;flex-direction:column}
+  .chip.R{background:linear-gradient(160deg,#ef5a4d,#c02d24)}
+  .chip.Y{background:linear-gradient(160deg,#f3c542,#c98d06)}
+  .chip.G{background:linear-gradient(160deg,#4cc55f,#248a37)}
+  .chip.B{background:linear-gradient(160deg,#4b8ce8,#2159ae)}
+  .chip.W{background:conic-gradient(from 210deg,#d93b31 0 25%,#e0a413 0 50%,#2f9e44 0 75%,#2f6fd0 0)}
+  .chip.W>span{background:rgba(10,15,20,.74);border-radius:5px;padding:1px 5px;font-size:12px}
+  .chip.lg.W>span{font-size:14px}
+  .palrow{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:5px}
+  .pallab{width:30px;flex:0 0 30px;text-align:center;font-size:12px;font-weight:700;color:var(--mut)}
+  .pallab.R{color:#ef6a5e}.pallab.Y{color:#f0c04a}.pallab.G{color:#5cd072}.pallab.B{color:#6b9ff0}.pallab.W{color:#c3cad6}
+
+  /* ---- 我的手牌 ---- */
+  #handList{display:flex;flex-wrap:wrap;gap:5px;min-height:40px;padding:6px;border-radius:9px;background:var(--panel2);border:1px dashed var(--line)}
+  #handList .chip.playable{outline:2px solid #4ade80;outline-offset:1px}
+  #handList .chip.sel{outline:3px solid var(--acc);outline-offset:2px}
+  .empty{color:var(--mut);font-size:12px;padding:6px 4px}
+
+  /* ---- 控件 ---- */
+  button.btn{
+    background:var(--panel2);color:var(--tx);border:1px solid var(--line);border-radius:8px;
+    padding:6px 11px;font-size:13px;font-family:inherit;cursor:pointer;transition:background .12s
+  }
+  button.btn:hover{background:#26374a}
+  button.btn.pri{background:linear-gradient(160deg,#3a86ff,#2563eb);border-color:#4b8cf5;font-weight:700}
+  button.btn.go{background:linear-gradient(160deg,#2fa34a,#1f7a35);border-color:#43b45e;font-weight:700}
+  button.btn:disabled{opacity:.4;cursor:default}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex-wrap:wrap}
+  .seg button{background:transparent;color:var(--mut);border:0;padding:6px 10px;font:inherit;font-size:12px;cursor:pointer}
+  .seg button.on{background:#2d5177;color:#fff;font-weight:700}
+  .seg button+button{border-left:1px solid var(--line)}
+  .lbl{font-size:12px;color:var(--mut)}
+  .tag{display:inline-block;background:#22303e;border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:12px;color:var(--mut)}
+  .tag.hot{background:#4a2b12;border-color:#8a5520;color:#ffc46b}
+  .tag.ok{background:#17361f;border-color:#2c6b3c;color:#7ee39a}
+
+  /* ---- 场面 ---- */
+  .scene{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .mini{text-align:center}
+  .mini .k{font-size:11px;color:var(--mut);margin-top:4px}
+  .swatch{width:26px;height:26px;border-radius:7px;border:2px solid transparent;cursor:pointer}
+  .swatch.on{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.25)}
+  .swatch.R{background:var(--R)}.swatch.Y{background:var(--Y)}.swatch.G{background:var(--G)}.swatch.B{background:var(--B)}
+
+  /* ---- 对手 ---- */
+  .opp{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:6px 8px;margin-bottom:6px}
+  .opp .nm{flex:1;font-weight:600}
+  .opp .sub{font-weight:400;color:var(--mut);font-size:11px;margin-left:6px}
+  .opp.turn{border-color:var(--acc)}
+  .cnt{display:flex;align-items:center;gap:5px}
+  .cnt b{min-width:24px;text-align:center;font-size:16px}
+  .stepbtn{width:26px;height:26px;border-radius:7px;background:#26374a;border:1px solid var(--line);color:#fff;font-size:15px;line-height:1;cursor:pointer;font-family:inherit}
+
+  /* ---- 建议 ---- */
+  .adv{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 10px;margin-bottom:8px}
+  .adv.best{border-color:#43b45e;background:linear-gradient(180deg,#1b3223,#1a2833)}
+  .adv .top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .adv .nm2{font-weight:700;font-size:15px}
+  .adv .wr{margin-left:auto;font-weight:800;font-size:17px;color:var(--acc);font-variant-numeric:tabular-nums}
+  .adv.best .wr{color:#7ee39a}
+  .adv .dlt{font-size:12px;color:var(--mut);font-weight:400;margin-left:3px}
+  .bar{height:6px;border-radius:4px;background:#0d151d;margin:7px 0 6px;overflow:hidden}
+  .bar i{display:block;height:100%;background:linear-gradient(90deg,#3a86ff,#43b45e);border-radius:4px}
+  .adv .why{font-size:12.5px;color:#cfe0ef}
+  .adv ul{margin:3px 0 0;padding-left:17px}
+  .adv li{margin:1px 0}
+
+  /* ---- 弹层 ---- */
+  .mask{position:fixed;inset:0;background:rgba(4,8,12,.72);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+  .mask.show{display:flex}
+  .dlg{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;max-width:560px;width:100%}
+  .dlg h3{margin:0 0 10px;font-size:15px}
+  textarea{width:100%;height:170px;background:#0d151d;color:var(--tx);border:1px solid var(--line);border-radius:9px;padding:9px;font:12px/1.5 Consolas,monospace;resize:vertical}
+  .note{font-size:12px;color:var(--mut);margin:8px 0 0}
+  .banner{background:#4a2b12;border:1px solid #8a5520;color:#ffc46b;border-radius:9px;padding:7px 10px;font-size:12.5px;margin-top:8px}
+  .banner.alert{background:#3d1f22;border-color:#7d353c;color:#ff9aa2}
+  .foot{color:var(--mut);font-size:11.5px;text-align:center;margin-top:10px}
+  details>summary{cursor:pointer;color:var(--mut);font-size:12px;outline:none}
+  .steps{font-size:12.5px;color:#cfe0ef;line-height:1.8;margin:8px 0 0}
+  .steps b{color:var(--acc)}
+
+  /* ---- 复盘 ---- */
+  .dlg.wide{max-width:920px;max-height:88vh;overflow:auto}
+  .sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px}
+  .sum div{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:8px 10px}
+  .sum .k2{font-size:11.5px;color:var(--mut);margin-bottom:2px}
+  .sum .v{font-size:16px;font-weight:700}
+  .sum .v.good{color:#7ee39a}.sum .v.bad{color:#ff9aa2}.sum .v.mid{color:var(--acc)}
+  .tl{max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:9px;background:#0d151d}
+  .tl table{width:100%;border-collapse:collapse;font-size:12.5px}
+  .tl th{position:sticky;top:0;background:#16202b;color:var(--mut);font-weight:600;text-align:left;padding:6px 9px;border-bottom:1px solid var(--line)}
+  .tl td{padding:5px 9px;border-bottom:1px solid #1b2632;white-space:nowrap}
+  .tl tr:last-child td{border-bottom:0}
+  .tl tr.me td{background:#152a3a}
+  .tl tr.win td{background:#1b3223;font-weight:700}
+  .tl tr.danger td{background:#3a2413}
+  .tl .num{color:var(--mut);font-variant-numeric:tabular-nums}
+  .games{display:flex;flex-direction:column;gap:5px;max-height:200px;overflow:auto}
+  .game{display:flex;align-items:center;gap:9px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:12.5px;cursor:pointer}
+  .game:hover{border-color:#4b8cf5}
+  .game .sp2{flex:1;color:var(--mut)}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin:6px 0 0}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px}
+  h3.sub{font-size:13px;color:var(--acc);margin:14px 0 7px}
+</style>
+</head>
+<body>
+<script>
+/* 全局错误提示：任何脚本异常都会显示在页面底部，方便排查 */
+window.addEventListener('error', function(e){
+  var d = document.getElementById('errBox');
+  if (!d){
+    d = document.createElement('div'); d.id = 'errBox';
+    d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;background:#7d353c;color:#fff;' +
+                      'padding:8px 10px;font:12px/1.5 Consolas,monospace;z-index:99;white-space:pre-wrap';
+    document.body.appendChild(d);
+  }
+  d.textContent = 'JS 错误：' + (e.message || e.error) +
+                  (e.lineno ? '（第 ' + e.lineno + ' 行 第 ' + e.colno + ' 列）' : '');
+  try { document.title = 'ERR ' + (e.message || ''); } catch (x){}
+});
+</script>
+
+<h1>UNO 决策助手 <small>实体牌局实时建议 · 官方标准规则 · 全程离线</small></h1>
+
+<main>
+<!-- ===================== 左栏：录入 ===================== -->
+<div>
+  <div class="panel">
+    <h2>① 局面设置</h2>
+    <div class="row">
+      <span class="lbl">人数</span>
+      <div class="seg" id="segPlayers"></div>
+      <span class="lbl" style="margin-left:6px">模拟精度</span>
+      <div class="seg" id="segBudget"></div>
+    </div>
+    <div class="row">
+      <button class="btn" id="btnDeal">设为开局</button>
+      <button class="btn" id="btnUndo">撤销</button>
+      <button class="btn" id="btnReset">重置</button>
+      <button class="btn" id="btnExport">导出存档</button>
+      <button class="btn" id="btnImport">导入存档</button>
+      <button class="btn" id="btnTest">自检</button>
+      <button class="btn pri" id="btnReview">复盘 / 全局视图</button>
+    </div>
+    <p class="note" id="poolInfo"></p>
+    <div id="poolBanner"></div>
+  </div>
+
+  <div class="panel">
+    <h2>② 局势</h2>
+    <div class="scene">
+      <div class="mini">
+        <div id="topCardBox"></div>
+        <div class="k">场面牌</div>
+      </div>
+      <div>
+        <div class="lbl" style="margin-bottom:4px">当前颜色</div>
+        <div class="row" id="colorPick"></div>
+      </div>
+      <div>
+        <div class="lbl">方向</div>
+        <div id="dirBox" style="font-size:15px;font-weight:700"></div>
+      </div>
+      <div>
+        <div class="lbl">当前回合</div>
+        <div id="turnBox" style="font-size:15px;font-weight:700"></div>
+      </div>
+      <span class="sp"></span>
+      <button class="btn" id="btnNextTurn">强制下一家 →</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>③ 我的手牌 <span class="lbl" id="handCount"></span></h2>
+    <div id="handList"></div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn go" id="btnPlaySel" disabled>出这张</button>
+      <button class="btn" id="btnDropSel" disabled>从手中移除</button>
+      <button class="btn" id="btnDrawPass">我抽牌 / 过牌</button>
+      <span class="sp"></span>
+      <span class="lbl" id="selInfo"></span>
+    </div>
+    <div id="drawBanner"></div>
+  </div>
+
+  <div class="panel">
+    <h2>④ 对手手牌数与出牌</h2>
+    <div id="oppBox"></div>
+    <p class="note"><b>手牌数一定要跟准 —— 它是整套胜率计算的地基。</b><br>
+      规则：<b>他出牌</b>点「他出牌…」再点那张牌（自动 −1）；<b>他出不了牌摸了张</b>点「他摸牌 +1」；<b>被 +2/+4 罚牌</b>程序自动加。<br>
+      漏记摸牌会让对手手牌数越算越少，胜率就全偏了。发现数字不对，用 − / + 修正。</p>
+  </div>
+
+  <div class="panel">
+    <h2>⑤ 点击录入</h2>
+    <div class="row" style="margin-bottom:9px">
+      <span class="lbl">记录到：</span>
+      <div class="seg" id="segTarget"></div>
+    </div>
+    <div id="palette"></div>
+    <p class="note">
+      选「我的手牌」时点牌 = 加入手牌；选某位对手时点牌 = 记录他打出这张；选「场面牌」= 直接修正场上顶牌。
+    </p>
+  </div>
+</div>
+
+<!-- ===================== 右栏：建议 ===================== -->
+<div>
+  <div class="panel">
+    <h2>决策建议</h2>
+    <div class="row" style="margin-bottom:10px">
+      <button class="btn pri" id="btnRun" style="padding:8px 18px;font-size:14px">分析并给出建议</button>
+      <span class="lbl">快捷键 Enter</span>
+      <span class="sp"></span>
+      <span class="lbl" id="runInfo"></span>
+    </div>
+    <div id="adviceBox"><div class="empty">录入手牌与牌情后，点上面的按钮开始分析。</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>怎么用</h2>
+    <div class="steps">
+      <b>1.</b> 点「设为开局」，然后用「点击录入」把手里 7 张牌逐张加进来。<br>
+      <b>2.</b> 别人出牌时，在「记录到」里选中那位对手，点他打出的牌。<br>
+      <b>3.</b> 轮到你，在「我的手牌」里点选一张 → 按「出这张」；不能出就按「我抽牌 / 过牌」。<br>
+      <b>4.</b> 出变色牌会弹选色框；别人出的变色牌颜色不确定就选最可能的。<br>
+      <b>5.</b> 随时按「分析并给出建议」（或 Enter）。
+    </div>
+  </div>
+
+  <div class="panel">
+    <details>
+      <summary>算法说明与局限</summary>
+      <div class="steps" style="color:var(--mut)">
+        <b>怎么算的</b><br>
+        · 从 108 张牌里扣掉你的手牌和已出牌，得到「未知牌池」；未知牌池 = 所有对手手牌 + 牌堆剩余。<br>
+        · 按你录入的对手手牌张数随机发牌，然后<b>把整局打完</b>，看你最终有没有赢——重复几千次，统计获胜比例。<br>
+        · 每张可出的牌都跑一遍，而且每张牌都跑<b>三种对手风格</b>（均衡 / 激进 / 保守），所以一张牌会有三个胜率。<br>
+        · 按三个胜率的平均值排序；如果一张牌在三种风格下都排前二，标为「稳健」。<br><br>
+        <b>它不是最优解 —— 这点很重要</b><br>
+        · 这是<b>经验最优</b>，不是博弈论意义上的最优。模拟里的对手是固定启发式，不是真人，也不会针对你调整。<br>
+        · UNO 随机性极大：四人局里即使每一步都选对，夺冠概率通常也只有 25%~40%。所以「按建议打还是输」是正常的。<br>
+        · 排名前 2~3 的牌经常只差 1~2 个百分点，而模拟误差就有 ±1 个百分点左右 —— 这种差距<b>就是掷硬币</b>，程序会标出「与首选并列」，别纠结。<br>
+        · 真正值得看的信号是：<b>三种对手模型下都排第 1</b>、<b>差距明显超出误差</b>、<b>卡手率低</b>。<br><br>
+        <b>最容易出错的地方</b><br>
+        · 对手手牌数不准 → 胜率全错。他们每次摸牌都要点一下「他摸牌 +1」。<br>
+        · 漏记已出牌 → 未知牌池偏大，结论变钝。<br>
+        · 录入冲突（某张牌记多了）会在「局面设置」下方红字提示。<br>
+        · 正式规则：+2 / +4 不可叠加、无 0-7 换手、摸一张后可以选择不出。<br><br>
+        <b>快捷键</b>：Enter 分析　N 强制下一家　Ctrl+Z 撤销
+      </div>
+    </details>
+  </div>
+</div>
+</main>
+
+<div class="foot">UNO 决策助手 · 单文件离线工具 · 数据只保存在你的浏览器里</div>
+
+<div class="mask" id="revMask"><div class="dlg wide">
+  <div class="row" style="margin-bottom:12px">
+    <h3 style="margin:0" id="revTitle">本局复盘</h3>
+    <span class="sp"></span>
+    <button class="btn" id="revArchive">归档本局</button>
+    <button class="btn" id="revCopy">复制复盘文本</button>
+    <button class="btn" id="revClose">关闭</button>
+  </div>
+  <div id="revBody"></div>
+</div></div>
+
+<div class="mask" id="colorMask"><div class="dlg" style="max-width:340px">
+  <h3>这张变色牌选了什么颜色？</h3>
+  <div class="row" id="colorModalBtns"></div>
+</div></div>
+
+<div class="mask" id="ioMask"><div class="dlg">
+  <h3 id="ioTitle">存档</h3>
+  <textarea id="ioText" spellcheck="false"></textarea>
+  <div class="row" style="margin-top:10px">
+    <button class="btn pri" id="ioOk">确定</button>
+    <button class="btn" id="ioCancel">关闭</button>
+    <span class="sp"></span>
+    <span class="lbl" id="ioHint"></span>
+  </div>
+</div></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   1. 牌与规则层
+   ===================================================================== */
+var COLORS = ['R','Y','G','B'];
+var COLOR_CN = {R:'红', Y:'黄', G:'绿', B:'蓝'};
+var RANK_CN  = {S:'跳过', R:'反转', D2:'+2'};
+
+function isWild(k){ return k.charCodeAt(0) === 87; }            /* 'W' */
+function colorOf(k){ return isWild(k) ? null : k[0]; }
+function rankOf(k){ return isWild(k) ? k : k.slice(1); }
+function cardCN(k){
+  if (k === 'W')  return '变色牌';
+  if (k === 'W4') return '+4';
+  var r = k.slice(1);
+  return COLOR_CN[k[0]] + (RANK_CN[r] || r);
+}
+function chipHTML(k, cls){
+  var c = isWild(k) ? 'W' : k[0], t;
+  if (k === 'W')       t = '<span>变色</span>';
+  else if (k === 'W4') t = '<span>+4</span>';
+  else                 t = (RANK_CN[k.slice(1)] || k.slice(1));
+  return '<div class="chip ' + c + ' ' + (cls || '') + '" data-k="' + k + '">' + t + '</div>';
+}
+
+/* 108 张标准牌 */
+var DECK_TOTAL = (function(){
+  var d = {}, i, n, c;
+  for (i = 0; i < COLORS.length; i++){
+    c = COLORS[i];
+    d[c + '0'] = 1;
+    for (n = 1; n <= 9; n++) d[c + n] = 2;
+    d[c + 'S'] = 2; d[c + 'R'] = 2; d[c + 'D2'] = 2;
+  }
+  d['W'] = 4; d['W4'] = 4;
+  return d;
+})();
+var ALL_KEYS = Object.keys(DECK_TOTAL);
+
+/* 合法出牌：同色 或 同数字/同符号；万能牌永远可出 */
+function canPlay(card, topCard, topColor){
+  if (isWild(card)) return true;
+  if (topColor && colorOf(card) === topColor) return true;
+  if (topCard && !isWild(topCard) && rankOf(card) === rankOf(topCard)) return true;
+  return false;
+}
+function nextIdx(i, dir, n){ return ((i + dir) % n + n) % n; }
+
+/* =====================================================================
+   2. 牌局状态与未知牌池
+   ===================================================================== */
+var st = null, undoStack = [], target = 'hand', selected = -1,
+    budget = 40000, pendingDraw = 0, advice = null, computing = false;
+
+/* 本地存储可用性自检：直接双击 file:// 打开时，部分浏览器会禁用它 */
+var lsOK = (function(){
+  try {
+    localStorage.setItem('uno-probe', '1');
+    localStorage.removeItem('uno-probe');
+    return true;
+  } catch (e){ return false; }
+})();
+
+function newState(n){
+  return { n:n, myHand:[], opp:new Array(n-1).fill(7), discard:[],
+           topCard:null, topColor:null, dir:1, turn:0,
+           log:[], startedAt:Date.now(), over:-1 };
+}
+function pushHistory(){
+  undoStack.push(JSON.stringify(st));
+  if (undoStack.length > 60) undoStack.shift();
+}
+/* 各人手牌数快照：[我, 玩家2, 玩家3, ...] */
+function handCounts(){
+  var a = [st.myHand.length], i;
+  for (i = 0; i < st.opp.length; i++) a.push(st.opp[i]);
+  return a;
+}
+/* 记录一个对局事件，供复盘使用 */
+function logEvent(actor, kind, card, color){
+  if (!st.log) st.log = [];
+  if (st.log.length > 600) return;
+  st.log.push({ t: Date.now(), a: actor, k: kind, c: card || null,
+                col: color || null, s: handCounts() });
+}
+function counts(list){
+  var m = Object.create(null), i;
+  for (i = 0; i < list.length; i++) m[list[i]] = (m[list[i]] || 0) + 1;
+  return m;
+}
+function poolOf(s){
+  var mine = counts(s.myHand), dis = counts(s.discard), p = {}, i, k, v;
+  for (i = 0; i < ALL_KEYS.length; i++){
+    k = ALL_KEYS[i];
+    v = DECK_TOTAL[k] - (mine[k] || 0) - (dis[k] || 0);
+    if (v > 0) p[k] = v;
+  }
+  return p;
+}
+function poolSize(p){ var s = 0, k; for (k in p) s += p[k]; return s; }
+function oppSum(s){ var t = 0, i; for (i = 0; i < s.opp.length; i++) t += s.opp[i]; return t; }
+function handLen(s, p){ return p === 0 ? s.myHand.length : s.opp[p-1]; }
+function nameOf(p){ return p === 0 ? '你' : ('玩家' + (p + 1)); }
+
+function validate(){
+  var msgs = [], mine = counts(st.myHand), dis = counts(st.discard), i, k, tot, pool, left;
+  for (i = 0; i < ALL_KEYS.length; i++){
+    k = ALL_KEYS[i];
+    tot = (mine[k] || 0) + (dis[k] || 0);
+    if (tot > DECK_TOTAL[k])
+      msgs.push(cardCN(k) + '：录入了 ' + tot + ' 张，但整副牌只有 ' + DECK_TOTAL[k] + ' 张。');
+  }
+  if (!st.topCard) msgs.push('还没有设置场面牌，请用下方「点击录入」并选择「场面牌」记录场上那一张。');
+  else if (!st.topColor) msgs.push('还没有确定当前颜色，请在「局势」里点一个颜色。');
+  if (st.over < 0){
+    for (i = 1; i < st.n; i++)
+      if (st.opp[i-1] === 0)
+        msgs.push(nameOf(i) + ' 手牌数为 0 —— 如果他确实出完了，本局就已经结束，请核对。');
+  }
+  pool = poolOf(st);
+  left = poolSize(pool) - oppSum(st);
+  if (left < 0)
+    msgs.push('对手手牌总数（' + oppSum(st) + '）超过了还没露面的牌（' + poolSize(pool) +
+              '），说明有牌漏记或多记了，请核对已出牌。');
+  /* 对手手牌数被扣到很低却没有赢家：很可能是漏记了他们摸牌 */
+  if (st.over < 0 && st.discard.length >= 20){
+    var low = 0, q;
+    for (q = 1; q < st.n; q++) if (st.opp[q-1] <= 1) low++;
+    if (low >= 2)
+      msgs.push('有 ' + low + ' 位对手只剩不到 2 张，但本局还没结束。这通常不是真的 —— ' +
+                '多半是他们摸过牌你没记。请核对：每次有对手出不了牌而摸牌，点一下他的「他摸牌 +1」。');
+  }
+  return { msgs: msgs, pool: pool, left: left };
+}
+
+/* =====================================================================
+   3. 效果结算（真实状态）
+   ===================================================================== */
+function applyPlayToState(player, key, chosenColor){
+  st.discard.push(key);
+  st.topCard = key;
+  st.topColor = isWild(key) ? chosenColor : colorOf(key);
+
+  var n = st.n, r = rankOf(key), steps = 1, t, cnt;
+  if (r === 'S') steps = 2;
+  else if (r === 'R'){ st.dir = -st.dir; steps = (n === 2) ? 2 : 1; }
+  else if (r === 'D2' || r === 'W4'){
+    t = nextIdx(player, st.dir, n);
+    cnt = (r === 'D2') ? 2 : 4;
+    if (t === 0) pendingDraw += cnt; else st.opp[t-1] += cnt;
+    steps = 2;
+  }
+  st.turn = ((player + st.dir * steps) % n + n) % n;
+
+  logEvent(player, 'play', key, isWild(key) ? st.topColor : null);
+
+  /* 出完所有牌即获胜 */
+  if (st.over < 0 && handLen(st, player) === 0){
+    st.over = player;
+    logEvent(player, 'win', null, null);
+    archiveGame(true);
+  }
+}
+
+/* =====================================================================
+   4. 蒙特卡洛引擎
+   ===================================================================== */
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function shuffle(a, rnd){
+  var i, j, t;
+  for (i = a.length - 1; i > 0; i--){
+    j = (rnd() * (i + 1)) | 0;
+    t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+function pickColorFor(hand){
+  var c = {R:0, Y:0, G:0, B:0}, i, k, best = 'R', bv = -1;
+  for (i = 0; i < hand.length; i++){ k = colorOf(hand[i]); if (k) c[k]++; }
+  for (i = 0; i < COLORS.length; i++) if (c[COLORS[i]] > bv){ bv = c[COLORS[i]]; best = COLORS[i]; }
+  return best;
+}
+
+/* 启发式策略：返回要打的手牌下标，-1 表示无牌可出
+   mode：0 均衡 / 1 激进（功能牌早打、不憋万能牌）/ 2 保守（更爱留万能牌） */
+function chooseCard(h, topCard, topColor, me, hands, dir, n, mode){
+  var best = -1, bestS = -1e9, nx = nextIdx(me, dir, n), nxCnt = hands[nx].length,
+      cc = {R:0, Y:0, G:0, B:0}, i, c, col, r, s, anyPlayable = false;
+  if (mode == null) mode = 0;
+  for (i = 0; i < h.length; i++){ c = colorOf(h[i]); if (c) cc[c]++; }
+  for (i = 0; i < h.length; i++){
+    c = h[i];
+    if (!canPlay(c, topCard, topColor)) continue;
+    anyPlayable = true;
+    r = rankOf(c); col = colorOf(c);
+    if (isWild(c)){
+      if (h.length === 1) s = 900;                       /* 最后一张，直接赢 */
+      else if (mode === 1) s = (r === 'W4' ? 46 : 32);   /* 激进：万能牌当普通牌用 */
+      else if (mode === 2) s = (r === 'W4' ? -95 : -75);
+      else s = (r === 'W4' ? -68 : -60);                 /* 均衡：尽量留手 */
+    } else {
+      s = 12 + (cc[col] || 0) * 2;                       /* 保持同色连贯 */
+      if (r === 'D2')      s += (nxCnt <= 2 ? 42 : (mode === 1 ? 30 : 9));
+      else if (r === 'S')  s += (nxCnt <= 2 ? 32 : (mode === 1 ? 24 : 7));
+      else if (r === 'R')  s += (n === 2 ? 26 : (mode === 1 ? 16 : 4));
+      else                 s -= 1;                       /* 数字牌优先打掉 */
+      if (h.length <= 3) s += 10;
+    }
+    if (h.length === 1) s += 800;
+    if (s > bestS){ bestS = s; best = i; }
+  }
+  return anyPlayable ? best : -1;
+}
+
+/* 推进一步。返回：-1 继续；>=0 该玩家获胜；-2 僵局
+   顺带统计「轮到我时有几张牌能出」，用于估算卡手率 */
+function stepOnce(g){
+  var me = g.cur, h = g.hands[me], pi, c, card, r, steps = 1, t, cnt, i, had;
+  pi = chooseCard(h, g.topCard, g.topColor, me, g.hands, g.dir, g.n, me === 0 ? 0 : g.mode);
+  if (me === 0){
+    g.myTurns = (g.myTurns || 0) + 1;
+    if (pi < 0) g.myStuck = (g.myStuck || 0) + 1;
+  }
+  if (pi < 0){
+    if (g.drawPile.length === 0) return -2;
+    c = g.drawPile.pop();
+    h.push(c);
+    if (canPlay(c, g.topCard, g.topColor)) pi = h.length - 1;
+    else { g.cur = nextIdx(me, g.dir, g.n); return -1; }
+  }
+  card = h[pi];
+  h.splice(pi, 1);
+  if (h.length === 0) return me;                 /* 出完即胜 */
+
+  if (isWild(card)){ g.topCard = card; g.topColor = pickColorFor(h); }
+  else { g.topCard = card; g.topColor = colorOf(card); }
+
+  r = rankOf(card);
+  if (r === 'S') steps = 2;
+  else if (r === 'R'){ g.dir = -g.dir; steps = (g.n === 2) ? 2 : 1; }
+  else if (r === 'D2' || r === 'W4'){
+    t = nextIdx(me, g.dir, g.n);
+    cnt = (r === 'D2') ? 2 : 4;
+    for (i = 0; i < cnt; i++) if (g.drawPile.length) g.hands[t].push(g.drawPile.pop());
+    steps = 2;
+  }
+  g.cur = ((me + g.dir * steps) % g.n + g.n) % g.n;
+  return -1;
+}
+
+/* 对一张候选牌在指定对手模型下跑 samples 次模拟 */
+function simCandidate(candKey, forcedColor, samples, rnd, poolKeys, mode){
+  var n = st.n, wins = 0, decided = 0, s, p, off, hands, g, guard, stop, r, idx, card,
+      steps, t, cnt, i, guard2, res, rr, c, turns = 0, stuck = 0;
+
+  for (s = 0; s < samples; s++){
+    shuffle(poolKeys, rnd);
+    hands = [st.myHand.slice()];
+    off = 0;
+    for (p = 0; p < n - 1; p++){
+      c = st.opp[p];
+      hands.push(poolKeys.slice(off, off + c));
+      off += c;
+    }
+    g = { hands:hands, drawPile:poolKeys.slice(off), topCard:st.topCard,
+          topColor:st.topColor, dir:st.dir, cur:st.turn, n:n, mode:(mode || 0),
+          myTurns:0, myStuck:0 };
+    if (!g.topColor) g.topColor = 'R';
+
+    /* 还没轮到我：先按对手模型推进到我 */
+    guard = 0; stop = false;
+    while (g.cur !== 0 && guard++ < 400){
+      r = stepOnce(g);
+      if (r === -1) continue;
+      stop = true; break;                        /* 没轮到我就分出胜负/僵局 */
+    }
+    if (stop) continue;
+
+    /* 强制打出候选牌 */
+    idx = g.hands[0].indexOf(candKey);
+    if (idx < 0) continue;
+    card = g.hands[0][idx];
+    g.hands[0].splice(idx, 1);
+    if (g.hands[0].length === 0){ wins++; decided++; turns += g.myTurns; stuck += g.myStuck; continue; }
+
+    if (isWild(card)){ g.topCard = card; g.topColor = forcedColor || pickColorFor(g.hands[0]); }
+    else { g.topCard = card; g.topColor = colorOf(card); }
+
+    r = rankOf(card); steps = 1;
+    if (r === 'S') steps = 2;
+    else if (r === 'R'){ g.dir = -g.dir; steps = (n === 2) ? 2 : 1; }
+    else if (r === 'D2' || r === 'W4'){
+      t = nextIdx(0, g.dir, n);
+      cnt = (r === 'D2') ? 2 : 4;
+      for (i = 0; i < cnt; i++) if (g.drawPile.length) g.hands[t].push(g.drawPile.pop());
+      steps = 2;
+    }
+    g.cur = ((0 + g.dir * steps) % n + n) % n;
+
+    /* 打到分出胜负 */
+    guard2 = 0; res = -2;
+    while (guard2++ < 4000){
+      rr = stepOnce(g);
+      if (rr === -1) continue;
+      res = rr; break;
+    }
+    decided++;
+    turns += g.myTurns; stuck += g.myStuck;
+    if (res === 0) wins++;
+  }
+  return { wr: decided > 0 ? wins / decided : 0, n: decided,
+           stuck: turns > 0 ? stuck / turns : 0, turns: turns };
+}
+
+/* =====================================================================
+   5. 建议计算与理由生成
+   ===================================================================== */
+var OPP_MODELS = ['均衡', '激进', '保守'];
+
+function playableKeys(){
+  var seen = Object.create(null), out = [], i, k;
+  for (i = 0; i < st.myHand.length; i++){
+    k = st.myHand[i];
+    if (seen[k]) continue;
+    if (canPlay(k, st.topCard, st.topColor)){ seen[k] = 1; out.push(k); }
+  }
+  return out;
+}
+function colorAfter(key, hand){
+  var h = hand.slice(), i = h.indexOf(key);
+  if (i >= 0) h.splice(i, 1);
+  return pickColorFor(h);
+}
+function buildReasons(c){
+  var key = c.key, out = [], r = rankOf(key), nx = nextIdx(0, st.dir, st.n),
+      nxCnt = handLen(st, nx), after = st.myHand.length - 1, i, same, col;
+
+  if (isWild(key)){
+    if (r === 'W4'){
+      out.push('+4 是最强的攻击牌：下家摸 4 张并被跳过，但打出后你就没有万能牌了。');
+      out.push('万能牌通常留到「手里没有同色牌」或「马上要赢」时再用，性价比更高。');
+    } else {
+      out.push('变色牌能接任何局面，也最值钱；现在打掉等于放弃了后面一次救命机会。');
+      out.push('只有在卡手（没有别的可出牌）或即将收尾时才值得提前用。');
+    }
+  } else {
+    col = colorOf(key);
+    same = 0;
+    for (i = 0; i < st.myHand.length; i++) if (colorOf(st.myHand[i]) === col) same++;
+    same -= 1;
+    if (same > 0) out.push('出完这张，手里还有 ' + same + ' 张' + COLOR_CN[col] + '牌，后面接得上，不容易被卡住。');
+    else out.push('出完这张，手里就没有' + COLOR_CN[col] + '牌了，下一手必须换颜色。');
+
+    if (r === 'D2'){
+      if (nxCnt <= 2) out.push('下家（' + nameOf(nx) + '）只剩 ' + nxCnt + ' 张，+2 让他摸 2 张并被跳过，直接掐掉他这一轮。');
+      else out.push('+2 让下家摸 2 张并被跳过。注意：你现在的下家还有 ' + nxCnt + ' 张，这一手压不到快赢的人。');
+    } else if (r === 'S'){
+      if (nxCnt <= 2) out.push('下家（' + nameOf(nx) + '）只剩 ' + nxCnt + ' 张，跳过他能直接阻止他出牌。');
+      else out.push('跳过下家，等于多抢一轮节奏。');
+    } else if (r === 'R'){
+      if (st.n === 2) out.push('两人对局时反转等于跳过，下家（' + nameOf(nx) + '）会被跳过一轮。');
+      else out.push('反转改变出牌方向，让上家接牌，可以打乱正在顺手的对手。');
+    } else {
+      out.push('数字牌灵活度最低，先打掉它，把功能牌留到关键回合。');
+    }
+  }
+  if (after >= 0 && after <= 2) out.push('出完只剩 ' + after + ' 张，进入收尾阶段。');
+  if (st.myHand.length === 1) out.push('这是你最后一张牌，打出去就直接获胜。');
+  if (c.rem === 1) out.push('这张牌你手里只有 1 张，打掉后就没有同类牌了。');
+  out.push('出这手之后，后面每一轮你被卡住（手里没牌可出、只能摸牌）的机会约 ' +
+           (c.stuck * 100).toFixed(0) + '%。');
+  return out;
+}
+
+function computeAdvice(){
+  var v = validate(), keys = playableKeys(), rnd = mulberry32(20240607),
+      pool = v.pool, poolKeys = [], k, i, j, t0 = performance.now(), res, per, colorsFor = {},
+      rem, samp, wrs, avg, worst, se, nt, stk, cands = [], order, b0, M = OPP_MODELS.length;
+
+  for (k in pool) for (i = 0; i < pool[k]; i++) poolKeys.push(k);
+
+  res = { msgs:v.msgs, left:v.left, pool:pool, myTurn:(st.turn === 0),
+          cands:[], keys:keys, per:0, ms:0, models:OPP_MODELS.slice(), tie:false };
+
+  if (keys.length > 0){
+    per = Math.max(30, Math.round(budget / (keys.length * M)));
+    res.per = per;
+    for (i = 0; i < keys.length; i++)
+      colorsFor[keys[i]] = isWild(keys[i]) ? colorAfter(keys[i], st.myHand) : null;
+
+    for (i = 0; i < keys.length; i++){
+      k = keys[i];
+      wrs = []; nt = 0; stk = 0;
+      for (j = 0; j < M; j++){
+        samp = simCandidate(k, colorsFor[k], per, rnd, poolKeys, j);
+        wrs.push(samp.wr);
+        nt += samp.n;
+        stk += samp.stuck * samp.n;
+      }
+      avg = (wrs[0] + wrs[1] + wrs[2]) / M;
+      worst = Math.min(wrs[0], Math.min(wrs[1], wrs[2]));
+      /* 平均值的标准误：三个模型各 per 次，合并后误差缩小 √3 倍 */
+      se = Math.sqrt(Math.max(1e-9, avg * (1 - avg) / per) / M);
+      rem = 0;
+      for (j = 0; j < st.myHand.length; j++) if (st.myHand[j] === k) rem++;
+      cands.push({ key:k, color:colorsFor[k], rem:rem, wr:avg, se:se, per:per,
+                   wrs:wrs, worst:worst, stuck: nt > 0 ? stk / nt : 0, rankPerModel:[0,0,0] });
+    }
+
+    /* 每个对手模型下各自排第几，用来判断「换个人来打还成不成立」 */
+    for (j = 0; j < M; j++){
+      order = cands.slice().sort(function(a, b){ return b.wrs[j] - a.wrs[j]; });
+      for (i = 0; i < order.length; i++) order[i].rankPerModel[j] = i + 1;
+    }
+
+    cands.sort(function(a, b){ return b.wr - a.wr; });
+    b0 = cands[0];
+
+    for (i = 0; i < cands.length; i++){
+      var c = cands[i];
+      c.worstRank = Math.max(c.rankPerModel[0], Math.max(c.rankPerModel[1], c.rankPerModel[2]));
+      c.robust = c.worstRank <= 2;
+      c.tied = (i > 0) && ((b0.wr - c.wr) < 2 * Math.sqrt(b0.se * b0.se + c.se * c.se));
+      c.reasons = buildReasons(c);
+    }
+    res.cands = cands;
+    res.best = b0.wr;
+    res.tie = (cands.length > 1) && cands[1].tied;
+    res.gap = (cands.length > 1) ? (b0.wr - cands[1].wr) : 0;
+    res.thr = (cands.length > 1) ? 2 * Math.sqrt(b0.se * b0.se + cands[1].se * cands[1].se) : 0;
+  }
+  res.ms = Math.round(performance.now() - t0);
+  advice = res;
+  return res;
+}
+
+/* =====================================================================
+   6. 渲染
+   ===================================================================== */
+function $(id){ return document.getElementById(id); }
+
+function renderSettings(){
+  var sp = $('segPlayers'), i, b;
+  sp.innerHTML = '';
+  for (i = 2; i <= 6; i++){
+    b = document.createElement('button');
+    b.textContent = i + ' 人';
+    if (i === st.n) b.className = 'on';
+    b.setAttribute('data-n', i);
+    b.onclick = (function(nn){
+      return function(){
+        if (st.n === nn) return;
+        pushHistory(); st = newState(nn); selected = -1; pendingDraw = 0; advice = null;
+        if (target !== 'hand' && target !== 'scene' && target >= nn) target = 'hand';
+        render();
+      };
+    })(i);
+    sp.appendChild(b);
+  }
+  var sb = $('segBudget');
+  sb.innerHTML = '';
+  [[12000,'快速'],[40000,'标准'],[120000,'精确']].forEach(function(p){
+    var btn = document.createElement('button');
+    btn.textContent = p[1] + ' ' + p[0];
+    if (budget === p[0]) btn.className = 'on';
+    btn.onclick = function(){ budget = p[0]; renderSettings(); };
+    sb.appendChild(btn);
+  });
+}
+
+function renderTargets(){
+  var seg = $('segTarget'), items = [['hand','我的手牌'], ['scene','场面牌']], p;
+  seg.innerHTML = '';
+  for (p = 1; p < st.n; p++) items.push([p, nameOf(p) + ' 出牌']);
+  items.forEach(function(it){
+    var b = document.createElement('button');
+    b.textContent = it[1];
+    if (String(target) === String(it[0])) b.className = 'on';
+    b.onclick = function(){ target = it[0]; selected = -1; render(); };
+    seg.appendChild(b);
+  });
+}
+
+function renderPalette(){
+  var box = $('palette'), html = '', numRanks = ['0','1','2','3','4','5','6','7','8','9','S','R','D2'], i, j;
+  for (i = 0; i < COLORS.length; i++){
+    html += '<div class="palrow"><div class="pallab ' + COLORS[i] + '">' + COLOR_CN[COLORS[i]] + '</div>';
+    for (j = 0; j < numRanks.length; j++) html += chipHTML(COLORS[i] + numRanks[j], 'sm');
+    html += '</div>';
+  }
+  html += '<div class="palrow"><div class="pallab W">万能</div>' + chipHTML('W','sm') + chipHTML('W4','sm') + '</div>';
+  box.innerHTML = html;
+  Array.prototype.forEach.call(box.querySelectorAll('.chip'), function(el){
+    el.onclick = function(){ onPalette(el.getAttribute('data-k')); };
+  });
+}
+
+function renderScene(){
+  $('topCardBox').innerHTML = st.topCard ? chipHTML(st.topCard, 'lg')
+                                         : '<div class="chip W lg"><span>未设置</span></div>';
+  var cp = $('colorPick');
+  cp.innerHTML = '';
+  COLORS.forEach(function(c){
+    var d = document.createElement('div');
+    d.className = 'swatch ' + c + (st.topColor === c ? ' on' : '');
+    d.title = COLOR_CN[c];
+    d.onclick = function(){
+      if (st.topColor === c) return;
+      pushHistory(); st.topColor = c; logEvent(0, 'color', null, c); advice = null; render();
+    };
+    cp.appendChild(d);
+  });
+  $('dirBox').textContent = st.dir === 1 ? '顺时针 →' : '逆时针 ←';
+  $('turnBox').innerHTML = st.turn === 0
+    ? '<span class="tag ok">轮到你</span>'
+    : '<span class="tag">' + nameOf(st.turn) + '</span>';
+}
+
+function renderHand(){
+  var box = $('handList'), i, k, cls;
+  $('handCount').textContent = '共 ' + st.myHand.length + ' 张';
+  if (st.myHand.length === 0){
+    box.innerHTML = '<div class="empty">还没有牌，用下方「点击录入」加进来。</div>';
+  } else {
+    box.innerHTML = st.myHand.map(function(kk, ii){
+      var c = '';
+      if (st.turn === 0 && canPlay(kk, st.topCard, st.topColor)) c += ' playable';
+      if (ii === selected) c += ' sel';
+      var t = kk === 'W' ? '<span>变色</span>' : kk === 'W4' ? '<span>+4</span>'
+                                                        : (RANK_CN[kk.slice(1)] || kk.slice(1));
+      return '<div class="chip ' + (isWild(kk) ? 'W' : kk[0]) + c + '" data-i="' + ii + '">' + t + '</div>';
+    }).join('');
+    Array.prototype.forEach.call(box.querySelectorAll('.chip'), function(el){
+      el.onclick = function(){
+        var x = +el.getAttribute('data-i');
+        selected = (selected === x ? -1 : x);
+        render();
+      };
+    });
+  }
+  var has = selected >= 0 && selected < st.myHand.length;
+  $('btnPlaySel').disabled = !has;
+  $('btnDropSel').disabled = !has;
+  $('selInfo').textContent = has
+    ? ('已选中：' + cardCN(st.myHand[selected]) +
+       (canPlay(st.myHand[selected], st.topCard, st.topColor) ? '（可出）' : '（当前不可出）'))
+    : '';
+
+  $('drawBanner').innerHTML = pendingDraw > 0
+    ? '<div class="banner">你被 +2/+4 罚牌了，还需要补录 <b>' + pendingDraw +
+      '</b> 张到你的手牌。<button class="btn" id="btnClearDraw" style="margin-left:8px">已补齐</button></div>'
+    : '';
+  if (pendingDraw > 0) $('btnClearDraw').onclick = function(){ pendingDraw = 0; render(); };
+}
+
+function renderOpps(){
+  var box = $('oppBox'), html = '', p;
+  for (p = 1; p < st.n; p++){
+    html += '<div class="opp' + (st.turn === p ? ' turn' : '') + '">' +
+              '<div class="nm">' + nameOf(p) +
+                (st.turn === p ? '<span class="sub">当前回合</span>' : '') + '</div>' +
+              '<button class="btn" data-draw="' + p + '" title="他出不了牌、摸了一张">他摸牌 +1</button>' +
+              '<div class="cnt">' +
+                '<button class="stepbtn" data-p="' + p + '" data-d="-1">−</button>' +
+                '<b>' + st.opp[p-1] + '</b>' +
+                '<button class="stepbtn" data-p="' + p + '" data-d="1">+</button>' +
+              '</div>' +
+              '<button class="btn" data-play="' + p + '">他出牌…</button>' +
+            '</div>';
+  }
+  box.innerHTML = html;
+  Array.prototype.forEach.call(box.querySelectorAll('.stepbtn'), function(el){
+    el.onclick = function(){
+      var p = +el.getAttribute('data-p'), d = +el.getAttribute('data-d');
+      pushHistory();
+      st.opp[p-1] = Math.max(0, st.opp[p-1] + d);
+      logEvent(p, 'count', null, null);
+      advice = null; render();
+    };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-draw]'), function(el){
+    el.onclick = function(){
+      var p = +el.getAttribute('data-draw');
+      pushHistory();
+      st.opp[p-1] += 1;
+      logEvent(p, 'odraw', null, null);
+      advice = null; render();
+    };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-play]'), function(el){
+    el.onclick = function(){
+      target = +el.getAttribute('data-play');
+      render();
+      $('palette').scrollIntoView({ behavior:'smooth', block:'center' });
+    };
+  });
+}
+
+function renderPool(){
+  var v = validate();
+  $('poolInfo').innerHTML =
+    '未知牌池 <b>' + poolSize(v.pool) + '</b> 张 ＝ 对手手牌 ' + oppSum(st) +
+    ' 张 ＋ 牌堆剩余 <b>' + Math.max(0, v.left) + '</b> 张　｜　已出牌 ' + st.discard.length + ' 张';
+  var b = '';
+  if (!lsOK)
+    b += '<div class="banner alert">⚠ 这个浏览器禁止了本地存储（直接双击 file:// 打开时常见）。' +
+         '自动保存、历史对局都用不了，请用「导出存档」手动保存本局。' +
+         '想让它记住历史，可以把文件放到本地网页服务器上打开，或者换 Firefox 试试。</div>';
+  if (st.over >= 0)
+    b += '<div class="banner" style="background:#17361f;border-color:#2c6b3c;color:#7ee39a">' +
+         '🏆 本局已结束：' + nameOf(st.over) + ' 先出完所有牌。' +
+         '点「复盘 / 全局视图」回看整局。</div>';
+  v.msgs.forEach(function(m){ b += '<div class="banner alert">⚠ ' + m + '</div>'; });
+  $('poolBanner').innerHTML = b;
+}
+
+function sideNotes(){
+  var notes = [], p, cnt, next = nextIdx(0, st.dir, st.n), minP = -1, minC = 99, i, k,
+      canHit = [], keys = ['RD2','YD2','GD2','BD2','RS','YS','GS','BS','W','W4'];
+
+  for (p = 1; p < st.n; p++){
+    cnt = st.opp[p-1];
+    if (cnt < minC){ minC = cnt; minP = p; }
+  }
+  if (minC <= 2){
+    notes.push('<b>⚠ ' + nameOf(minP) + ' 只剩 ' + minC + ' 张</b>，已经进入危险区，' +
+               (minC === 1 ? '下一轮就可能出完。' : '再有两轮就可能出完。'));
+    if (minP === next){
+      notes.push('他正好是你的下家，你出「跳过 / +2 / +4」可以让他这一轮完全出不了牌，这是最直接的压制。');
+    } else {
+      notes.push('他<b>不是</b>你的下家（你的下家是 ' + nameOf(next) + '），' +
+                 '这一手打不到他；想压制他要么靠他上家出手，要么用「反转」把方向调过来。');
+    }
+    for (i = 0; i < keys.length; i++){
+      k = keys[i];
+      if (st.myHand.indexOf(k) < 0) continue;
+      if (isWild(k) || canPlay(k, st.topCard, st.topColor)) canHit.push(cardCN(k));
+    }
+    if (canHit.length) notes.push('你手上现在能打出的压制牌有：' + canHit.join('、') + '。');
+    else notes.push('你手上暂时没有能打出的跳过 / +2 / +4，先想办法把颜色接上。');
+  }
+  if (st.myHand.indexOf('W') >= 0 || st.myHand.indexOf('W4') >= 0)
+    notes.push('你手里还有变色牌，这是唯一能接任何局面的牌，尽量留到卡手或收尾时再用。');
+  return notes;
+}
+
+function renderAdvice(){
+  var box = $('adviceBox');
+  if (computing){ box.innerHTML = '<div class="empty">正在模拟约 ' + budget + ' 局，请稍候…</div>'; return; }
+  if (!advice){ box.innerHTML = '<div class="empty">录入手牌与牌情后，点上面的按钮开始分析。</div>'; return; }
+
+  var html = '', next = nextIdx(0, st.dir, st.n), nxCnt = handLen(st, next), notes;
+
+  notes = sideNotes();
+  if (notes.length){
+    html += '<div class="adv notes" style="background:#1c2634"><div class="why"><ul>' +
+              notes.map(function(x){ return '<li>' + x + '</li>'; }).join('') +
+            '</ul></div></div>';
+  }
+
+  if (!advice.myTurn)
+    html += '<div class="banner">现在轮到 ' + nameOf(st.turn) + '，下面是「轮到你时」各张牌的胜率参考。</div>';
+  if (advice.keys.length === 0)
+    html += '<div class="banner">你手上没有能出的牌，建议<b>抽一张</b>；抽到可出的牌再录入，然后重新分析。</div>';
+  if (advice.left < 0)
+    html += '<div class="banner alert">牌情有冲突，结果不可信，请先按上面的提示修正录入。</div>';
+
+  html += '<div class="row" style="margin-bottom:9px">' +
+            '<span class="tag">下家 ' + nameOf(next) + '：' + nxCnt + ' 张</span>' +
+            '<span class="tag">你：' + st.myHand.length + ' 张</span>' +
+            '<span class="tag">牌堆：' + Math.max(0, advice.left) + ' 张</span>' +
+            (advice.per ? '<span class="tag">每张 ' + advice.per + ' 局 × ' + advice.models.length + ' 种对手模型</span>' : '') +
+            (advice.per ? '<span class="tag">用时 ' + advice.ms + ' ms</span>' : '') +
+          '</div>';
+
+  advice.cands.forEach(function(c, i){
+    var pct = (c.wr * 100).toFixed(1);
+    var se = (c.se * 100).toFixed(1);
+    var dlt = i > 0 ? ((c.wr - advice.best) * 100).toFixed(1) : '';
+    var tags = '';
+    if (i === 0) tags += '<span class="tag ok">首选</span>';
+    if (c.tied) tags += '<span class="tag">与首选并列</span>';
+    if (c.robust && c.worstRank === 1) tags += '<span class="tag ok">三种对手模型下都是第 1</span>';
+    else if (c.robust) tags += '<span class="tag ok">最差也是第 ' + c.worstRank + '（共 ' + advice.cands.length + ' 张）</span>';
+    else tags += '<span class="tag bad">换个对手模型会掉到第 ' + c.worstRank + '</span>';
+    if (c.color) tags += '<span class="tag hot">出后建议选' + COLOR_CN[c.color] + '色</span>';
+
+    html += '<div class="adv cand' + (i === 0 ? ' best' : '') + '">' +
+              '<div class="top">' + chipHTML(c.key, '') +
+                '<span class="nm2">' + cardCN(c.key) + (c.rem > 1 ? ' ×' + c.rem : '') + '</span>' +
+                tags +
+                '<span class="wr">' + pct + '%<span class="dlt">±' + se + (dlt ? '　' + dlt : '') + '</span></span>' +
+              '</div>' +
+              '<div class="bar"><i style="width:' + Math.max(2, c.wr * 100) + '%"></i></div>' +
+              '<div class="row" style="margin-bottom:4px">' +
+                advice.models.map(function(m, j){
+                  return '<span class="tag">' + m + ' ' + (c.wrs[j] * 100).toFixed(1) + '%</span>';
+                }).join('') +
+                '<span class="tag">卡手率 ' + (c.stuck * 100).toFixed(0) + '%</span>' +
+              '</div>' +
+              '<div class="why"><ul>' +
+                c.reasons.map(function(x){ return '<li>' + x + '</li>'; }).join('') +
+              '</ul></div>' +
+            '</div>';
+  });
+
+  if (advice.cands.length > 1){
+    var gap = advice.gap * 100, thr = advice.thr * 100;
+    html += '<p class="note">首选与次选相差 <b>' + gap.toFixed(1) + '</b> 个百分点；' +
+            '这套模拟自身的误差约 <b>±' + thr.toFixed(1) + '</b> 个百分点。' +
+            (advice.tie
+              ? '<b class="dn">差距落在误差范围内，两张牌怎么选都差不多，不必纠结。</b>'
+              : '<b class="up">差距超出误差范围，这个排序是可信的。</b>') +
+            '</p>';
+  }
+  if (advice.cands.length > 0){
+    html += '<p class="note">' +
+      '<b>怎么读这些数字：</b>胜率 = 在「对手分别按 均衡 / 激进 / 保守 三种风格出牌」的几千次模拟里你最终赢下来的比例；' +
+      '±后面是统计误差，两个选项的差距小于误差时，排名只是抛硬币的结果。' +
+      '「卡手率」是你打出这张之后，往后每一轮被卡住（没牌可出只能摸）的机会。<br>' +
+      '这不是理论最优解 —— 它是三种对手假设下的经验最优。UNO 本身随机性很大，' +
+      '最好的选择在一局里也经常输，请重点看「跨模型稳不稳」，而不是只看那一个百分比。</p>';
+  }
+  box.innerHTML = html;
+}
+
+function render(){
+  renderSettings(); renderTargets(); renderPalette(); renderScene();
+  renderHand(); renderOpps(); renderPool(); renderAdvice();
+  renderReviewBadge();
+  autosave();
+}
+function renderReviewBadge(){
+  var b = $('btnReview'), g = loadGames(), cur = (st.log && st.log.length) ? 1 : 0;
+  b.textContent = '复盘 / 全局视图' + (g.length + cur > 0 ? '（' + (g.length + cur) + '）' : '');
+}
+
+/* =====================================================================
+   7. 交互
+   ===================================================================== */
+function askColor(cb){
+  var box = $('colorModalBtns');
+  box.innerHTML = '';
+  COLORS.forEach(function(c){
+    var b = document.createElement('button');
+    b.className = 'btn';
+    b.style.background = 'var(--' + c + ')';
+    b.style.borderColor = 'rgba(255,255,255,.35)';
+    b.style.fontWeight = '700';
+    b.textContent = COLOR_CN[c] + '色';
+    b.onclick = function(){ $('colorMask').classList.remove('show'); cb(c); };
+    box.appendChild(b);
+  });
+  $('colorMask').classList.add('show');
+}
+
+function onPalette(key){
+  pushHistory();
+  advice = null;
+
+  if (target === 'hand'){
+    st.myHand.push(key);
+    logEvent(0, 'gain', key, null);
+    render(); return;
+  }
+  if (target === 'scene'){
+    st.discard.push(key);
+    st.topCard = key;
+    if (isWild(key)){
+      st.topColor = st.topColor || 'R';
+      logEvent(0, 'set', key, st.topColor);
+      askColor(function(c){ st.topColor = c; logEvent(0, 'color', null, c); render(); });
+    } else { st.topColor = colorOf(key); logEvent(0, 'set', key, null); }
+    render(); return;
+  }
+
+  var p = +target;
+  st.opp[p-1] = Math.max(0, st.opp[p-1] - 1);
+  if (isWild(key)){
+    applyPlayToState(p, key, st.topColor || 'R');
+    render();
+    askColor(function(c){ st.topColor = c; logEvent(p, 'color', null, c); render(); });
+  } else {
+    applyPlayToState(p, key, null);
+    render();
+  }
+}
+
+function commitMyPlay(index){
+  var key = st.myHand[index];
+  pushHistory();
+  advice = null;
+  if (isWild(key)){
+    askColor(function(c){
+      st.myHand.splice(index, 1);
+      applyPlayToState(0, key, c);
+      selected = -1; render();
+    });
+    return;
+  }
+  st.myHand.splice(index, 1);
+  applyPlayToState(0, key, null);
+  selected = -1;
+  render();
+}
+
+/* =====================================================================
+   8. 存档
+   ===================================================================== */
+function saveObj(){ return { v:1, st:st, budget:budget, target:target, pendingDraw:pendingDraw }; }
+function autosave(){ try { localStorage.setItem('uno-advisor', JSON.stringify(saveObj())); } catch (e){} }
+function normalize(){
+  st.n = st.n || 4;
+  if (!st.opp || st.opp.length !== st.n - 1){
+    var o = new Array(st.n - 1).fill(7), i;
+    for (i = 0; i < o.length; i++) if (st.opp && st.opp[i] != null) o[i] = st.opp[i];
+    st.opp = o;
+  }
+  if (!st.myHand) st.myHand = [];
+  if (!st.discard) st.discard = [];
+  if (st.dir !== -1) st.dir = 1;
+  if (st.turn == null || st.turn >= st.n) st.turn = 0;
+  if (!st.log || !st.log.length) st.log = st.log || [];
+  if (st.over == null || st.over >= st.n) st.over = -1;
+  if (!st.startedAt) st.startedAt = Date.now();
+}
+
+/* ---------- 多局存档：每一局单独留档，互不覆盖 ---------- */
+var GAMES_KEY = 'uno-advisor-games';
+function loadGames(){
+  try { return JSON.parse(localStorage.getItem(GAMES_KEY) || '[]') || []; } catch (e){ return []; }
+}
+function saveGames(arr){
+  try { localStorage.setItem(GAMES_KEY, JSON.stringify(arr.slice(0, 20))); return true; }
+  catch (e){ return false; }
+}
+function archiveGame(silent){
+  if (!st.log || st.log.length < 2) return false;
+  var arr = loadGames(), rec, i;
+  for (i = 0; i < arr.length; i++) if (arr[i].id === st.startedAt) { if (!silent) alert('本局已经归档过了。'); return false; }
+  rec = { id: st.startedAt, savedAt: Date.now(), n: st.n, over: st.over,
+          myHand: st.myHand.slice(), opp: st.opp.slice(), discard: st.discard.slice(),
+          log: st.log.slice(), topCard: st.topCard, topColor: st.topColor };
+  arr.unshift(rec);
+  if (saveGames(arr)){ if (!silent) alert('已归档本局，可在「复盘」里回看。'); return true; }
+  alert('归档失败：浏览器不允许本地存储（file:// 下可能被禁）。请用「导出存档」手动保存。');
+  return false;
+}
+function tryLoad(){
+  try {
+    var raw = localStorage.getItem(GAMES_KEY);
+    if (raw === null) localStorage.setItem(GAMES_KEY, '[]');
+  } catch (e){}
+  try {
+    var raw2 = localStorage.getItem('uno-advisor');
+    if (!raw2) return false;
+    var o = JSON.parse(raw2);
+    if (o && o.st && o.st.myHand){
+      st = o.st;
+      budget = o.budget || 40000;
+      target = (o.target === undefined) ? 'hand' : o.target;
+      pendingDraw = o.pendingDraw || 0;
+      normalize();
+      return true;
+    }
+  } catch (e){}
+  return false;
+}
+
+/* =====================================================================
+   9. 复盘 / 全局视图
+   ===================================================================== */
+var revGames = [];        /* 历史对局 */
+var revIdx = -1;          /* -1 = 当前牌局，>=0 = revGames 下标 */
+
+function fmtTime(ts){
+  var d = new Date(ts);
+  var p = function(x){ return (x < 10 ? '0' : '') + x; };
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' +
+         p(d.getHours()) + ':' + p(d.getMinutes());
+}
+function fmtDur(ms){
+  var m = Math.floor(ms / 60000), s = Math.floor(ms % 60000 / 1000);
+  return m > 0 ? (m + ' 分 ' + s + ' 秒') : (s + ' 秒');
+}
+function eventText(e){
+  var who = e.a === -1 ? '系统' : nameOf(e.a);
+  switch (e.k){
+    case 'deal':  return '开局，各对手 7 张';
+    case 'set':   return '场面牌设为 ' + cardCN(e.c) + (e.col ? '（选' + COLOR_CN[e.col] + '色）' : '');
+    case 'play':  return who + ' 出 ' + cardCN(e.c) + (e.col ? '（选' + COLOR_CN[e.col] + '色）' : '');
+    case 'gain':  return who + ' 摸到 ' + cardCN(e.c);
+    case 'pass':  return who + ' 抽牌 / 过牌';
+    case 'odraw': return who + ' 摸了一张牌（出不了牌）';
+    case 'turn':  return '手动把回合交给 ' + who;
+    case 'count': return who + ' 手牌数被手动改成 ' + (e.s ? e.s[e.a] : '?');
+    case 'color': return '当前颜色改为' + COLOR_CN[e.col];
+    case 'win':   return '🏆 ' + who + ' 出完所有牌，本局结束';
+  }
+  return who + ' ' + e.k;
+}
+/* 手牌数曲线（SVG 折线） */
+function handChart(log, n){
+  var W = 660, H = 175, pl = 32, pr = 12, pt = 12, pb = 22, i, j, maxC = 1;
+  if (!log.length) return '';
+  for (i = 0; i < log.length; i++){
+    if (!log[i].s) continue;
+    for (j = 0; j < log[i].s.length; j++) if (log[i].s[j] > maxC) maxC = log[i].s[j];
+  }
+  var N = log.length;
+  var X = function(i){ return pl + (N <= 1 ? 0 : (W - pl - pr) * i / (N - 1)); };
+  var Y = function(v){ return pt + (H - pt - pb) * (1 - v / maxC); };
+  var cols = ['#3a86ff', '#d93b31', '#e0a413', '#2f9e44', '#b06bff', '#00c2c7'];
+  var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;' +
+            'background:#0d151d;border:1px solid var(--line);border-radius:9px;margin-bottom:4px">';
+  for (j = 0; j <= maxC; j++){
+    svg += '<line x1="' + pl + '" y1="' + Y(j).toFixed(1) + '" x2="' + (W - pr) + '" y2="' + Y(j).toFixed(1) +
+           '" stroke="#1b2632"/>' +
+           '<text x="' + (pl - 6) + '" y="' + (Y(j) + 4).toFixed(1) +
+           '" fill="#8ea6bd" font-size="10" text-anchor="end">' + j + '</text>';
+  }
+  for (j = 0; j < n; j++){
+    var pts = [], started = false;
+    for (i = 0; i < N; i++){
+      if (!log[i].s || log[i].s[j] == null) continue;
+      pts.push(X(i).toFixed(1) + ',' + Y(log[i].s[j]).toFixed(1));
+      started = true;
+    }
+    if (!started) continue;
+    svg += '<polyline fill="none" stroke="' + cols[j % cols.length] + '" stroke-width="2" ' +
+           'stroke-linejoin="round" points="' + pts.join(' ') + '"/>';
+    var lastPt = pts[pts.length - 1].split(',');
+    svg += '<circle cx="' + lastPt[0] + '" cy="' + lastPt[1] + '" r="3" fill="' + cols[j % cols.length] + '"/>';
+  }
+  svg += '</svg>';
+  var lg = '<div class="legend">';
+  for (j = 0; j < n; j++)
+    lg += '<span><i style="background:' + cols[j % cols.length] + '"></i>' + nameOf(j) + '</span>';
+  return svg + lg + '</div>';
+}
+/* 出牌堆统计 */
+function pileStats(list){
+  var m = {}, i, r, lab;
+  for (i = 0; i < list.length; i++){
+    r = rankOf(list[i]);
+    if (list[i] === 'W') lab = '变色牌';
+    else if (list[i] === 'W4') lab = '+4';
+    else if (r === 'S') lab = '跳过';
+    else if (r === 'R') lab = '反转';
+    else if (r === 'D2') lab = '+2';
+    else continue;
+    m[lab] = (m[lab] || 0) + 1;
+  }
+  return m;
+}
+
+/* 当前正在看的局面数据（当前局或历史局） */
+function revData(){
+  return revIdx < 0 ? st : revGames[revIdx];
+}
+
+function revSummary(d){
+  var i, myNow = d.myHand.length, ev = (d.log || []).length,
+      win = (d.over == null ? -1 : d.over), plays = 0, gains = 0, passes = 0,
+      dur = (d.log && d.log.length ? d.log[d.log.length-1].t - (d.startedAt || d.log[0].t) : 0),
+      pstats = pileStats(d.discard || []), keys = [];
+
+  for (i = 0; i < ev; i++){
+    if (d.log[i].k === 'play' && d.log[i].a === 0) plays++;
+    if (d.log[i].k === 'gain') gains++;
+    if (d.log[i].k === 'pass') passes++;
+  }
+  for (var k in pstats) keys.push(k + '×' + pstats[k]);
+
+  var rank = '—';
+  if (win === 0) rank = '第 1 名';
+  else if (win > 0) rank = '未出完';
+
+  return { ev:ev, win:win, rank:rank, plays:plays, gains:gains, passes:passes,
+           dur:dur, pstats:pstats, pile:keys, myNow:myNow };
+}
+
+/* 每位对手「首次掉到 2 张及以下」的事件下标 */
+function dangerMarks(log){
+  var marks = {}, seen = {}, i, j;
+  for (i = 0; i < log.length; i++){
+    if (!log[i].s) continue;
+    for (j = 1; j < log[i].s.length; j++){
+      if (log[i].s[j] <= 2 && !seen[j]){ seen[j] = 1; marks[i] = 1; }
+    }
+  }
+  return marks;
+}
+
+function renderReview(){
+  var d = revData(), s = revSummary(d), h = '', i, j, log = d.log || [];
+  var over = (s.win >= 0);
+
+  h += '<div class="sum">' +
+       '<div><div class="k2">结果</div><div class="v ' + (over ? (s.win === 0 ? 'good' : 'bad') : 'mid') + '">' +
+         (over ? (s.win === 0 ? '你赢了' : nameOf(s.win) + ' 先出完') : '进行中') + '</div></div>' +
+       '<div><div class="k2">你的名次</div><div class="v">' + s.rank + '</div></div>' +
+       '<div><div class="k2">你手上的牌</div><div class="v">' + s.myNow + ' 张</div></div>' +
+       '<div><div class="k2">记录事件</div><div class="v">' + s.ev + '</div></div>' +
+       '<div><div class="k2">你出牌 / 摸牌 / 过牌</div><div class="v">' + s.plays + ' / ' + s.gains + ' / ' + s.passes + '</div></div>' +
+       '<div><div class="k2">用时</div><div class="v">' + (s.dur > 0 ? fmtDur(s.dur) : '—') + '</div></div>' +
+       '</div>';
+
+  if (!log.length){
+    h += '<div class="banner">这一局没有逐手记录（是加复盘功能之前的旧存档），所以只能回放出牌顺序，' +
+         '看不出每一张是谁出的。从现在开始，每一手都会自动记下「谁出的、出的什么、各人剩几张」。</div>';
+    h += '<h3 class="sub">最终手牌数</h3><div class="row">' +
+         '<span class="tag">你：' + (d.myHand || []).length + ' 张</span>' +
+         (function(){ var t = ''; for (var q = 1; q < d.n; q++)
+            t += '<span class="tag' + ((d.opp[q-1] || 0) <= 2 ? ' hot' : '') + '">' +
+                 nameOf(q) + '：' + (d.opp[q-1] || 0) + ' 张</span>'; return t; })() +
+         '<span class="tag">牌堆剩余：' + Math.max(0, 108 - (d.myHand||[]).length -
+            (d.discard||[]).length - (d.opp||[]).reduce(function(a,b){ return a+b; }, 0)) + ' 张</span>' +
+         '</div>';
+    h += '<h3 class="sub">你最后手里的牌</h3><div class="row">' +
+         (d.myHand || []).map(function(k){
+            return '<span class="tag' + (isWild(k) ? ' hot' : '') + '">' + cardCN(k) + '</span>';
+          }).join('') + '</div>';
+    h += '<h3 class="sub">出牌顺序（共 ' + (d.discard || []).length + ' 张，第 1 张通常是翻出的场面牌）</h3>';
+    h += '<div class="tl"><table><tr><th>#</th><th>牌</th><th>类型</th></tr>';
+    (d.discard || []).forEach(function(k, ii){
+      var r = rankOf(k), typ = '数字牌';
+      if (k === 'W') typ = '万能 · 变色';
+      else if (k === 'W4') typ = '万能 · +4';
+      else if (r === 'S') typ = '功能 · 跳过';
+      else if (r === 'R') typ = '功能 · 反转';
+      else if (r === 'D2') typ = '功能 · +2';
+      var cls = (typ === '数字牌') ? '' : ' class="danger"';
+      h += '<tr' + cls + '><td class="num">' + (ii + 1) + '</td><td>' + cardCN(k) +
+           '</td><td>' + typ + '</td></tr>';
+    });
+    h += '</table></div>';
+  } else {
+    h += '<h3 class="sub">各人手牌数变化</h3>' + handChart(log, d.n);
+    h += '<h3 class="sub">关键节点</h3><div class="adv notes"><div class="why"><ul>' + keyMoments(d, log) + '</ul></div></div>';
+    h += '<h3 class="sub">完整时间线（' + log.length + ' 条，最新在最下）</h3>';
+    h += '<div class="tl"><table><tr><th>#</th><th>谁</th><th>做了什么</th><th>你的牌</th>' +
+         (function(){ var t = ''; for (var q = 1; q < d.n; q++) t += '<th>' + nameOf(q) + '</th>'; return t; })() +
+         '</tr>';
+    var marks = dangerMarks(log);
+    for (i = 0; i < log.length; i++){
+      var e = log[i], cls = e.a === 0 ? 'me' : '';
+      if (e.k === 'win') cls = 'win';
+      else if (marks[i]) cls += ' danger';
+      h += '<tr class="' + cls + '"><td class="num">' + (i + 1) + '</td>' +
+           '<td>' + (e.a === -1 ? '系统' : nameOf(e.a)) + '</td>' +
+           '<td>' + eventText(e) + '</td>' +
+           '<td class="num">' + (e.s ? e.s[0] : '—') + '</td>';
+      for (j = 1; j < d.n; j++) h += '<td class="num">' + (e.s && e.s[j] != null ? e.s[j] : '—') + '</td>';
+      h += '</tr>';
+    }
+    h += '</table></div>';
+  }
+
+  h += '<h3 class="sub">出牌堆构成（' + (d.discard || []).length + ' 张）</h3>';
+  h += '<div class="row">' + (s.pile.length
+        ? s.pile.map(function(x){ return '<span class="tag hot">' + x + '</span>'; }).join('')
+        : '<span class="lbl">暂无</span>') + '</div>';
+  h += '<p class="note">这副牌里 +4 共 4 张、变色牌 4 张、各色 +2 / 跳过 / 反转各 2 张。' +
+       '功能牌出现在出牌堆里的数量，能看出这一局的攻防强度。</p>';
+
+  var games = loadGames();
+  h += '<h3 class="sub">历史对局（本地保存最近 20 局，当前有 ' + games.length + ' 局）</h3>';
+  if (!games.length){
+    h += '<p class="note">还没有归档的对局。一局分出胜负时会自动归档，也可以点右上角「归档本局」。</p>';
+  } else {
+    h += '<div class="row" style="margin-bottom:7px">' +
+         '<button class="btn" id="revClear">清空全部历史</button>' +
+         '<span class="lbl">点任意一条可以回看那一局</span></div>';
+    h += '<div class="games">';
+    for (i = 0; i < games.length; i++){
+      var g = games[i];
+      var gw = (g.over == null ? -1 : g.over);
+      h += '<div class="game" data-g="' + i + '">' +
+           '<span>' + fmtTime(g.savedAt) + '</span>' +
+           '<span class="sp2">' + g.n + ' 人局 · ' + (g.log ? g.log.length : 0) + ' 条记录 · ' +
+             (g.discard ? g.discard.length : 0) + ' 张出牌</span>' +
+           '<span class="tag ' + (gw === 0 ? 'ok' : '') + '">' +
+             (gw < 0 ? '未分出胜负' : (gw === 0 ? '你赢了' : nameOf(gw) + ' 赢')) + '</span>' +
+           '<button class="btn" data-del="' + i + '">删除</button>' +
+           '</div>';
+    }
+    h += '</div>';
+  }
+
+  $('revBody').innerHTML = h;
+  $('revTitle').textContent = (revIdx < 0 ? '本局复盘' : '复盘 · ' + fmtTime(revGames[revIdx].savedAt)) +
+                              (revIdx < 0 && over ? '（已结束）' : '');
+
+  Array.prototype.forEach.call($('revBody').querySelectorAll('.game'), function(el){
+    el.onclick = function(ev){
+      if (ev.target.getAttribute('data-del') !== null) return;
+      revIdx = +el.getAttribute('data-g');
+      renderReview();
+    };
+  });
+  Array.prototype.forEach.call($('revBody').querySelectorAll('[data-del]'), function(el){
+    el.onclick = function(ev){
+      ev.stopPropagation();
+      if (!confirm('删除这条对局记录？')) return;
+      var arr = loadGames();
+      arr.splice(+el.getAttribute('data-del'), 1);
+      saveGames(arr);
+      revIdx = -1;
+      renderReview();
+    };
+  });
+  var clr = $('revClear');
+  if (clr) clr.onclick = function(){
+    if (!confirm('清空全部历史对局？此操作不可撤销。')) return;
+    saveGames([]);
+    revGames = [];
+    revIdx = -1;
+    renderReview();
+    renderReviewBadge();
+  };
+}
+
+function keyMoments(d, log){
+  var out = [], i, j, seenDanger = {}, firstBig = null;
+  for (i = 0; i < log.length; i++){
+    var e = log[i];
+    if (e.k === 'play' && e.a !== 0 && (e.c === 'W4' || e.c === 'W')){
+      firstBig = firstBig || { i:i, e:e };
+    }
+    if (e.k === 'play' && rankOf(e.c) === 'D2'){
+      out.push('第 ' + (i + 1) + ' 手：' + nameOf(e.a) + ' 打出 ' + cardCN(e.c) +
+               '，他的下家被罚摸 2 张并跳过一轮。');
+    }
+    if (e.s){
+      for (j = 1; j < e.s.length; j++){
+        if (e.s[j] <= 2 && !seenDanger[j]){
+          seenDanger[j] = 1;
+          out.push('第 ' + (i + 1) + ' 手：' + nameOf(j) + ' 只剩 ' + e.s[j] + ' 张，进入危险区。');
+        }
+        if (e.s[j] === 0 && e.k !== 'win')
+          out.push('第 ' + (i + 1) + ' 手：' + nameOf(j) + ' 手牌清零（如果这是正常出完，本局应该已经结束）。');
+      }
+    }
+    if (e.k === 'pass' && e.a === 0) out.push('第 ' + (i + 1) + ' 手：你抽牌 / 过牌，说明当时手里没有能出的牌。');
+    if (e.k === 'gain' && e.a === 0 && e.c && (e.c === 'W' || e.c === 'W4'))
+      out.push('第 ' + (i + 1) + ' 手：你摸到了一张' + cardCN(e.c) + '，这是能接任何局面的牌。');
+  }
+  if (firstBig)
+    out.push('第 ' + (firstBig.i + 1) + ' 手：' + nameOf(firstBig.e.a) + ' 第一次打出万能牌（' + cardCN(firstBig.e.c) + '）。');
+  if (!out.length) out.push('这一局还没有触发关键节点。');
+  return out.map(function(x){ return '<li>' + x + '</li>'; }).join('');
+}
+
+/* 复盘文本（Markdown，方便贴到聊天/文档里） */
+function reviewText(){
+  var d = revData(), s = revSummary(d), log = d.log || [], L = [];
+  L.push('# UNO 复盘' + (revIdx < 0 ? '（本局）' : '（' + fmtTime(revGames[revIdx].savedAt) + '）'));
+  L.push('');
+  L.push('- 人数：' + d.n + ' 人');
+  L.push('- 结果：' + (s.win < 0 ? '进行中' : (s.win === 0 ? '你赢了' : nameOf(s.win) + ' 先出完')));
+  L.push('- 你的名次：' + s.rank);
+  L.push('- 你手牌：' + s.myNow + ' 张（' + (d.myHand || []).map(cardCN).join('、') + '）');
+  L.push('- 场面牌：' + (d.topCard ? cardCN(d.topCard) : '未设置') +
+         (d.topColor ? '（当前' + COLOR_CN[d.topColor] + '色）' : ''));
+  L.push('- 出牌堆：' + (d.discard || []).length + ' 张' + (s.pile.length ? '，含 ' + s.pile.join('、') : ''));
+  L.push('');
+  if (log.length){
+    L.push('## 时间线');
+    L.push('');
+    L.push('| # | 谁 | 动作 | 手牌数 |');
+    L.push('|---|---|---|---|');
+    for (var i = 0; i < log.length; i++){
+      var e = log[i];
+      L.push('| ' + (i + 1) + ' | ' + (e.a === -1 ? '系统' : nameOf(e.a)) + ' | ' +
+             eventText(e).replace(/\|/g, '/') + ' | ' + (e.s ? e.s.join('/') : '—') + ' |');
+    }
+  } else {
+    L.push('## 出牌顺序（旧存档，无详细记录）');
+    L.push('');
+    L.push((d.discard || []).map(cardCN).join('、'));
+  }
+  return L.join('\n');
+}
+
+function openReview(idx){
+  revGames = loadGames();
+  revIdx = (idx == null ? -1 : idx);
+  renderReview();
+  $('revMask').classList.add('show');
+}
+
+/* =====================================================================
+   10. 自检
+   ===================================================================== */
+function selfTest(){
+  var out = [], ok = function(c, m){ out.push((c ? '✅ ' : '❌ ') + m); }, tot = 0, k, i;
+
+  for (i = 0; i < ALL_KEYS.length; i++) tot += DECK_TOTAL[ALL_KEYS[i]];
+  ok(tot === 108, '标准牌共 108 张（实得 ' + tot + '）');
+  ok(ALL_KEYS.length === 54, '不同牌面 54 种（实得 ' + ALL_KEYS.length + '）');
+  ok(DECK_TOTAL['R0'] === 1 && DECK_TOTAL['R5'] === 2 && DECK_TOTAL['W'] === 4 && DECK_TOTAL['W4'] === 4,
+     '各牌张数正确（0 一张、1-9 两张、万能各四张）');
+
+  ok(canPlay('R5', 'R9', 'R') === true,  '同色可出');
+  ok(canPlay('B5', 'R5', 'R') === true,  '同数字可出');
+  ok(canPlay('B5', 'R9', 'R') === false, '不同色不同数字不可出');
+  ok(canPlay('BS', 'R9', 'R') === false, '跳过牌不能凭功能跨色出');
+  ok(canPlay('BS', 'RS', 'R') === true,  '同符号（跳过）可出');
+  ok(canPlay('W4', 'B9', 'B') === true,  '万能牌永远可出');
+  ok(canPlay('B3', 'W', 'B') === true,   '场面是变色牌时按所选颜色判定');
+  ok(canPlay('B3', 'W', 'R') === false,  '变色牌选红后蓝 3 不可出');
+
+  var t1 = { n:4, hands:[['RS','R1'],['R1','Y2'],['R2','G3'],['R3','B4']],
+             drawPile:['B7'], topCard:'R9', topColor:'R', dir:1, cur:0 };
+  stepOnce(t1);
+  ok(t1.cur === 2, '跳过：出跳过牌后越过下家（cur=' + t1.cur + '，应为 2）');
+  ok(t1.hands[0].length === 1, '跳过：出牌后自己少一张（' + t1.hands[0].length + ' 张）');
+
+  var t2 = { n:4, hands:[['RR','R1'],['R1','Y2'],['R2','G3'],['R3','B4']],
+             drawPile:['B7'], topCard:'R9', topColor:'R', dir:1, cur:0 };
+  stepOnce(t2);
+  ok(t2.dir === -1 && t2.cur === 3, '反转：方向翻转并轮到上家（dir=' + t2.dir + ', cur=' + t2.cur + '，应为 -1, 3）');
+
+  var t3 = { n:4, hands:[['RD2','R1'],['R1','Y2'],['R2','G3'],['R3','B4']],
+             drawPile:['B7','G2','Y3'], topCard:'R9', topColor:'R', dir:1, cur:0 };
+  stepOnce(t3);
+  ok(t3.hands[1].length === 4, '+2：下家摸 2 张（' + t3.hands[1].length + ' 张，应为 4）');
+  ok(t3.cur === 2, '+2：下家被跳过（cur=' + t3.cur + '，应为 2）');
+
+  var t4 = { n:4, hands:[['RW4','Y1'],['R1','Y2'],['R2','G3'],['R3','B4']],
+             drawPile:['B7','G2','Y3','B1','G5'], topCard:'R9', topColor:'R', dir:1, cur:0 };
+  stepOnce(t4);
+  ok(t4.hands[1].length === 6, '+4：下家摸 4 张（' + t4.hands[1].length + ' 张，应为 6）');
+  ok(t4.topColor === 'G' || t4.topColor === 'B' || t4.topColor === 'R' || t4.topColor === 'Y',
+     '+4：打出后自动选定颜色（' + t4.topColor + '）');
+
+  var t5 = { n:2, hands:[['RR','R1'],['R1','Y2']], drawPile:['B7'], topCard:'R9', topColor:'R', dir:1, cur:0 };
+  stepOnce(t5);
+  ok(t5.cur === 0, '两人局反转＝跳过，仍轮到自己（cur=' + t5.cur + '）');
+
+  var t6 = { n:4, hands:[['R5'],['R1','Y2'],['R2','G3'],['R3','B4']],
+             drawPile:[], topCard:'R9', topColor:'R', dir:1, cur:0 };
+  ok(stepOnce(t6) === 0, '出完最后一张立即判胜');
+
+  var t7 = { n:4, hands:[['G1'],['R1','Y2'],['R2','G3'],['R3','B4']],
+             drawPile:['G7'], topCard:'R9', topColor:'R', dir:1, cur:0 };
+  stepOnce(t7);
+  ok(t7.hands[0].length === 2 && t7.cur === 1,
+     '摸到不能出的牌时让过下家（手牌 ' + t7.hands[0].length + ' 张，应为 2；cur=' + t7.cur + '，应为 1）');
+
+  var t7b = { n:4, hands:[['G1'],['R1','Y2'],['R2','G3'],['R3','B4']],
+              drawPile:['R7'], topCard:'R9', topColor:'R', dir:1, cur:0 };
+  stepOnce(t7b);
+  ok(t7b.hands[0].length === 1 && t7b.cur === 1 && t7b.topCard === 'R7',
+     '摸到能出的牌时按规则可以立即打出（手牌 ' + t7b.hands[0].length + ' 张，场面 ' + t7b.topCard + '）');
+
+  var t8 = { n:4, hands:[['W'],['R1','Y2'],['R2','G3'],['R3','B4']],
+             drawPile:[], topCard:'R9', topColor:'R', dir:1, cur:0 };
+  ok(stepOnce(t8) === 0, '只剩万能牌时也能打出并获胜');
+
+  /* 对手模型确实会改变出牌选择 */
+  var hands0 = [['W','R1'], ['R1','Y2'], ['R2','G3'], ['R3','B4']];
+  ok(chooseCard(hands0[0], 'R9', 'R', 0, hands0, 1, 4, 0) === 1,
+     '均衡模型：手里有红1时先打红1、留下万能牌');
+  ok(chooseCard(hands0[0], 'R9', 'R', 0, hands0, 1, 4, 1) === 0,
+     '激进模型：同一手牌会选择直接打万能牌');
+  ok(chooseCard(hands0[0], 'R9', 'R', 0, hands0, 1, 4, 2) === 1,
+     '保守模型：更不愿意动用万能牌');
+
+  /* 效果一致性：状态层与模拟层结论相同 */
+  var save0 = st;
+  st = newState(4); st.discard = ['R9']; st.topCard = 'R9'; st.topColor = 'R';
+  st.turn = 0; st.opp = [2, 2, 2];
+  applyPlayToState(0, 'RD2', null);
+  ok(st.opp[0] === 4 && st.turn === 2,
+     '状态层 +2 结算正确（下家 ' + st.opp[0] + ' 张，应为 4；轮次 ' + st.turn + '，应为 2）');
+  applyPlayToState(2, 'GS', null);
+  ok(st.turn === 0, '状态层跳过结算正确（轮次 ' + st.turn + '，应为 0）');
+  st = save0;
+
+  /* 未知牌池推算 */
+  var save = st;
+  st = newState(4);
+  st.myHand = ['R0','R1','R2','R3','R4','R5','R6'];
+  st.discard = ['B9'];
+  var p = poolOf(st);
+  ok(poolSize(p) === 100, '开局未知牌池 = 108 − 7 张手牌 − 1 张场面 = 100（实得 ' + poolSize(p) + '）');
+  ok(p['R0'] === undefined && p['R1'] === 1, '已扣掉自己手里的牌');
+  ok(p['B9'] === 1, '已扣掉场上那张（蓝 9 原本 2 张）');
+  st = save;
+
+  return out;
+}
+
+/* =====================================================================
+   10. 绑定与启动
+   ===================================================================== */
+$('btnPlaySel').onclick = function(){ if (selected >= 0) commitMyPlay(selected); };
+$('btnDropSel').onclick = function(){
+  if (selected < 0) return;
+  pushHistory(); st.myHand.splice(selected, 1); selected = -1; advice = null; render();
+};
+$('btnDrawPass').onclick = function(){
+  pushHistory(); st.turn = nextIdx(0, st.dir, st.n);
+  logEvent(0, 'pass', null, null);
+  advice = null; render();
+};
+$('btnNextTurn').onclick = function(){
+  pushHistory(); st.turn = nextIdx(st.turn, st.dir, st.n);
+  logEvent(st.turn, 'turn', null, null);
+  advice = null; render();
+};
+$('btnUndo').onclick = function(){
+  if (!undoStack.length) return;
+  st = JSON.parse(undoStack.pop()); normalize(); selected = -1; advice = null; render();
+};
+$('btnReset').onclick = function(){
+  if (!confirm('清空当前牌局，重新开始？\n（本局会先归档到「复盘」，可以回看）')) return;
+  archiveGame(true);
+  pushHistory(); st = newState(st.n); selected = -1; pendingDraw = 0; advice = null; render();
+};
+$('btnDeal').onclick = function(){
+  pushHistory();
+  st.opp = new Array(st.n - 1).fill(7);
+  st.dir = 1; st.turn = 0; pendingDraw = 0; advice = null;
+  st.over = -1; st.startedAt = Date.now(); st.log = [];
+  logEvent(-1, 'deal', null, null);
+  render();
+};
+$('btnRun').onclick = function(){
+  computing = true; render();
+  setTimeout(function(){
+    try { computeAdvice(); }
+    catch (e){ advice = null; alert('分析出错：' + e.message); }
+    computing = false; render();
+  }, 30);
+};
+$('btnTest').onclick = function(){
+  var r = selfTest(), bad = r.filter(function(x){ return x.indexOf('❌') === 0; }).length;
+  alert('自检结果：' + (r.length - bad) + ' / ' + r.length + ' 通过\n\n' + r.join('\n'));
+};
+
+var ioMode = 'export';
+$('btnExport').onclick = function(){
+  ioMode = 'export';
+  $('ioTitle').textContent = '导出存档（复制下面整段文本保存）';
+  $('ioText').value = JSON.stringify(saveObj());
+  $('ioHint').textContent = '复制保存，下次粘回来即可导入。';
+  $('ioMask').classList.add('show');
+  $('ioText').focus(); $('ioText').select();
+};
+$('btnImport').onclick = function(){
+  ioMode = 'import';
+  $('ioTitle').textContent = '导入存档（把导出的文本粘进来）';
+  $('ioText').value = '';
+  $('ioHint').textContent = '粘贴后点「确定」覆盖当前牌局。';
+  $('ioMask').classList.add('show');
+  $('ioText').focus();
+};
+$('ioOk').onclick = function(){
+  if (ioMode === 'export'){ $('ioMask').classList.remove('show'); return; }
+  var t = $('ioText').value.trim();
+  if (!t){ $('ioMask').classList.remove('show'); return; }
+  try {
+    var o = JSON.parse(t);
+    if (!o.st || !o.st.myHand) throw new Error('格式不对');
+    pushHistory();
+    st = o.st; budget = o.budget || 40000;
+    target = (o.target === undefined) ? 'hand' : o.target;
+    pendingDraw = o.pendingDraw || 0;
+    normalize(); selected = -1; advice = null;
+    $('ioMask').classList.remove('show');
+    render();
+  } catch (e){ alert('导入失败：' + e.message); }
+};
+$('ioCancel').onclick = function(){ $('ioMask').classList.remove('show'); };
+$('colorMask').onclick = function(e){ if (e.target === $('colorMask')) $('colorMask').classList.remove('show'); };
+
+/* 复盘 */
+$('btnReview').onclick = function(){ openReview(-1); };
+$('revClose').onclick = function(){ $('revMask').classList.remove('show'); };
+$('revMask').onclick = function(e){ if (e.target === $('revMask')) $('revMask').classList.remove('show'); };
+$('revArchive').onclick = function(){
+  if (revIdx >= 0){ alert('现在看的是历史对局，只能归档当前正在打的这一局。'); return; }
+  archiveGame(false);
+  revGames = loadGames();
+  renderReview();
+};
+$('revCopy').onclick = function(){
+  var t = reviewText();
+  var ok = false;
+  try {
+    var ta = document.createElement('textarea');
+    ta.value = t; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+    document.body.appendChild(ta); ta.select();
+    ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+  } catch (err){ ok = false; }
+  if (!ok && navigator.clipboard) { navigator.clipboard.writeText(t).then(function(){}, function(){}); ok = true; }
+  $('ioTitle').textContent = ok ? '复盘文本（已尝试复制到剪贴板）' : '复盘文本（请手动全选复制）';
+  $('ioText').value = t;
+  $('ioHint').textContent = '这是一份 Markdown，可直接贴到聊天或文档里。';
+  $('ioMask').classList.add('show');
+  $('ioText').focus(); $('ioText').select();
+};
+
+document.addEventListener('keydown', function(e){
+  if (e.target && /TEXTAREA|INPUT/.test(e.target.tagName)) return;
+  if (e.key === 'Enter'){ e.preventDefault(); $('btnRun').click(); }
+  else if (e.key === 'n' || e.key === 'N'){ $('btnNextTurn').click(); }
+  else if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')){ e.preventDefault(); $('btnUndo').click(); }
+});
+
+/* 启动 */
+st = newState(4);
+if (!tryLoad()) st.opp = [7, 7, 7];
+normalize();
+render();
+
+/* =====================================================================
+   11. 场景验证入口（地址后加 ?selftest=1 可自动跑一遍并显示结果）
+   ===================================================================== */
+function demo(){
+  var out = [], sv = st, svb = budget, i, j, el, t0, okOrder = true, c;
+  st = newState(4);
+  st.topCard = 'R7'; st.topColor = 'R'; st.dir = 1; st.turn = 0;
+  st.myHand = ['R1','R2','RS','RD2','B5','G9','W'];
+  st.discard = ['R7','B3','G1'];
+  st.opp = [7, 5, 2];
+  budget = 12000;
+  t0 = Date.now();
+  computeAdvice();
+  el = Date.now() - t0;
+
+  out.push('录入：我的手牌 7 张，场面红 7，对手手牌 7 / 5 / 2，已出 3 张。');
+  out.push('可出的牌 ' + advice.cands.length + ' 张，用时 ' + el + ' ms，每张 ' + advice.per + ' 局 × 3 种对手模型。');
+  for (i = 0; i < advice.cands.length; i++){
+    c = advice.cands[i];
+    out.push('&nbsp;&nbsp;' + (i + 1) + '. ' + cardCN(c.key) + ' → ' +
+             (c.wr * 100).toFixed(1) + '% ±' + (c.se * 100).toFixed(1) +
+             '（均衡 ' + (c.wrs[0] * 100).toFixed(1) + ' / 激进 ' + (c.wrs[1] * 100).toFixed(1) +
+             ' / 保守 ' + (c.wrs[2] * 100).toFixed(1) + '，最差第 ' + c.worstRank + ' 名，卡手率 ' +
+             (c.stuck * 100).toFixed(0) + '%）');
+    if (i > 0 && c.wr > advice.cands[i-1].wr + 1e-9) okOrder = false;
+  }
+  if (advice.cands.length){
+    out.push('首选：<b>' + cardCN(advice.cands[0].key) + '</b>　理由：' + advice.cands[0].reasons[0]);
+  }
+  out.push((advice.cands.length > 0 ? '✅' : '❌') + ' 至少给出一张候选牌');
+  out.push((okOrder ? '✅' : '❌') + ' 建议按胜率降序排列');
+  out.push('· 首选与次选相差 ' + (advice.gap * 100).toFixed(1) + ' 个百分点，噪声阈值 ' +
+           (advice.thr * 100).toFixed(1) + ' → ' + (advice.tie ? '并列（差距不可信）' : '差距可信'));
+  out.push((advice.cands[0].se > 0 ? '✅' : '❌') + ' 给出了统计误差');
+  out.push((el < 15000 ? '✅' : '❌') + ' 分析在 15 秒内完成（' + el + ' ms）');
+  out.push((advice.left >= 0 ? '✅' : '❌') + ' 未知牌池自洽（牌堆剩余 ' + advice.left + ' 张）');
+
+  st = sv; budget = svb; advice = null;
+  return out.join('<br>');
+}
+window.__unoDemo = demo;
+window.__unoTest = selfTest;
+
+(function(){
+  var q = (location.search || '') + (location.hash || '');
+  if (q.indexOf('selftest') < 0) return;
+  var r = selfTest(), bad = 0, rows = '', d;
+  r.forEach(function(x){
+    if (x.indexOf('❌') === 0) bad++;
+    rows += '<div style="padding:2px 0">' + x + '</div>';
+  });
+  d = '';
+  try { d = demo(); } catch (e){ d = '<span style="color:#ff9aa2">场景验证出错：' + e.message + '</span>'; }
+  $('adviceBox').innerHTML =
+    '<div class="adv" style="border-color:' + (bad ? '#d93b31' : '#43b45e') + '">' +
+      '<h2 style="margin-bottom:6px">规则自检：' + (r.length - bad) + ' / ' + r.length + ' 通过</h2>' +
+      rows + '</div>' +
+    '<div class="adv"><h2 style="margin-bottom:6px">场景验证</h2>' +
+      '<div style="font-size:12.5px;line-height:1.9">' + d + '</div></div>';
+})();
+
+/* 界面链路验证：地址后加 ?uitest=1，用真实点击事件跑一遍完整录入流程 */
+function uiTest(){
+  var log = [], bad = 0, self = this;
+  function P(t, ok, extra){
+    if (ok === false) bad++;
+    log.push((ok === false ? '❌ ' : ok === true ? '✅ ' : '· ') + t + (extra ? '：' + extra : ''));
+  }
+  function sel(s){ return document.querySelector(s); }
+  function clickSel(s){
+    var el = sel(s);
+    if (!el){ P('找不到元素 ' + s, false); return null; }
+    el.click(); return el;
+  }
+  function clickBtn(txt){
+    var els = document.querySelectorAll('#segTarget button, .panel button'), i;
+    for (i = 0; i < els.length; i++){
+      if (els[i].textContent.replace(/\s/g, '') === txt.replace(/\s/g, '')){ els[i].click(); return true; }
+    }
+    P('找不到按钮 ' + txt, false);
+    return false;
+  }
+  function addCards(keys){
+    clickBtn('我的手牌');
+    keys.forEach(function(k){ clickSel('#palette .chip[data-k="' + k + '"]'); });
+  }
+
+  /* 1. 重置并设置场面牌 */
+  st = newState(4); st.opp = [7, 7, 7]; undoStack = []; selected = -1;
+  pendingDraw = 0; advice = null; budget = 600; target = 'hand'; render();
+  clickBtn('场面牌');
+  clickSel('#palette .chip[data-k="R7"]');
+  P('设置场面牌', st.topCard === 'R7' && st.topColor === 'R',
+    'topCard=' + st.topCard + ' topColor=' + st.topColor);
+
+  /* 2. 录入手牌 */
+  addCards(['R1', 'R2', 'RS', 'RD2', 'B5', 'G9', 'W']);
+  P('点击录入手牌 7 张', st.myHand.length === 7, st.myHand.join(' '));
+  P('手牌区渲染 7 张', document.querySelectorAll('#handList .chip').length === 7);
+
+  /* 3. 改对手手牌数 */
+  var plus = document.querySelectorAll('#oppBox .stepbtn[data-d="1"]');
+  plus[1].click(); plus[1].click();
+  P('对手手牌数 +2', st.opp[1] === 9, '玩家3 = ' + st.opp[1]);
+
+  /* 4. 选中一张可出的牌并打出 */
+  var chips = document.querySelectorAll('#handList .chip'), idx = -1, i;
+  for (i = 0; i < chips.length; i++) if (chips[i].className.indexOf('playable') >= 0){ idx = i; break; }
+  P('手牌区标出了「可出」的牌', idx >= 0, idx >= 0 ? ('第 ' + (idx + 1) + ' 张') : '无');
+  chips[idx].click();
+  P('选中后「出这张」可用', $('btnPlaySel').disabled === false);
+  var before = st.myHand.length, playedKey = st.myHand[idx];
+  $('btnPlaySel').click();
+  P('出牌成功', st.myHand.length === before - 1 && st.discard[st.discard.length - 1] === playedKey,
+    '打出 ' + cardCN(playedKey) + '，剩余 ' + st.myHand.length + ' 张，场面 ' + cardCN(st.topCard));
+
+  /* 5. 撤销 */
+  $('btnUndo').click();
+  P('撤销回到出牌前', st.myHand.length === before && st.discard[st.discard.length - 1] === 'R7',
+    '手牌 ' + st.myHand.length + ' 张，场面 ' + cardCN(st.topCard));
+
+  /* 6. 对手出牌（含 +2 的效果结算） */
+  clickBtn('玩家3 出牌');
+  clickSel('#palette .chip[data-k="RD2"]');
+  P('记录对手出 +2 并结算效果',
+    st.discard[st.discard.length - 1] === 'RD2' && st.opp[2] === 9,
+    '场面 ' + cardCN(st.topCard) + '，玩家4 手牌 ' + st.opp[2] + '（原 7，应 +2 变 9）');
+
+  /* 7. 分析 */
+  computeAdvice();
+  render();
+  P('分析给出候选牌', advice.cands.length > 0,
+    advice.cands.length + ' 张，首选 ' + (advice.cands.length ? cardCN(advice.cands[0].key) +
+    ' ' + (advice.cands[0].wr * 100).toFixed(1) + '%' : '无'));
+  var html = $('adviceBox').innerHTML;
+  P('建议面板渲染出卡片', document.querySelectorAll('#adviceBox .adv.cand').length === advice.cands.length);
+  P('面板含「首选」标记', html.indexOf('首选') >= 0);
+  P('面板含理由文字', html.indexOf('出完这张') >= 0 || html.indexOf('万能牌') >= 0);
+  /* 新：统计与多模型 */
+  var c0 = advice.cands[0];
+  P('每张牌有三种对手模型的结果', c0.wrs && c0.wrs.length === 3,
+    (c0.wrs || []).map(function(x){ return (x * 100).toFixed(1) + '%'; }).join(' / '));
+  P('给出统计误差 ±', typeof c0.se === 'number' && c0.se > 0, '±' + (c0.se * 100).toFixed(2) + 'pp');
+  P('给出卡手率', typeof c0.stuck === 'number', (c0.stuck * 100).toFixed(1) + '%');
+  P('给出跨模型名次与稳健标记', typeof c0.worstRank === 'number' && typeof c0.robust === 'boolean',
+    '三种模型下最差第 ' + c0.worstRank + ' 名，稳健=' + c0.robust);
+  P('面板显示三种模型的胜率', html.indexOf('均衡') >= 0 && html.indexOf('激进') >= 0 && html.indexOf('保守') >= 0);
+  P('面板说明误差与并列', html.indexOf('误差') >= 0);
+  /* 他摸牌 +1 */
+  var before2 = st.opp[0];
+  var db = document.querySelector('#oppBox [data-draw="1"]');
+  P('对手面板有「他摸牌」按钮', !!db);
+  if (db){ db.click(); }
+  P('「他摸牌」让手牌数 +1 并记账',
+    st.opp[0] === before2 + 1 && st.log[st.log.length - 1].k === 'odraw',
+    st.opp[0] + ' 张（原 ' + before2 + '）');
+
+  /* 8. 变色牌出牌弹选色 */
+  addCards(['W']);
+  var hs = document.querySelectorAll('#handList .chip');
+  for (i = 0; i < hs.length; i++){
+    if (hs[i].getAttribute('data-i') !== null &&
+        st.myHand[+hs[i].getAttribute('data-i')] === 'W'){ hs[i].click(); break; }
+  }
+  $('btnPlaySel').click();
+  P('出变色牌弹出选色框', $('colorMask').classList.contains('show'));
+  var cbtn = document.querySelectorAll('#colorModalBtns button');
+  P('选色框有 4 个颜色', cbtn.length === 4);
+  if (cbtn.length === 4) cbtn[2].click();
+  P('选色后变色牌已打出', st.discard[st.discard.length - 1] === 'W' && !$('colorMask').classList.contains('show'),
+    '当前颜色 = ' + st.topColor);
+
+  /* 9. 存档往返 */
+  var json = JSON.stringify(saveObj());
+  var keep = st.myHand.length;
+  st.myHand = [];
+  var o = JSON.parse(json); st = o.st; normalize();
+  P('存档导出/导入往返一致', st.myHand.length === keep, '手牌 ' + st.myHand.length + ' 张');
+
+  /* 10. 冲突检测 */
+  st.myHand = ['R0', 'R0'];
+  var v = validate();
+  P('重复录入同一张牌会报冲突', v.msgs.length > 0, v.msgs.length ? v.msgs[0] : '未报错');
+
+  /* 11. 复盘：事件记录 */
+  saveGames([]);                       /* 清空历史，保证可重复运行 */
+  st = newState(4); st.opp = [7, 7, 7]; undoStack = []; selected = -1;
+  pendingDraw = 0; advice = null; target = 'hand'; render();
+  var n0 = st.log.length;
+  clickBtn('场面牌');
+  clickSel('#palette .chip[data-k="R7"]');
+  P('记录「设置场面牌」事件', st.log.length === n0 + 1 && st.log[st.log.length - 1].k === 'set',
+    '事件数 ' + st.log.length);
+  addCards(['R1']);
+  P('记录「摸到牌」事件', st.log[st.log.length - 1].k === 'gain');
+  clickBtn('玩家3 出牌');
+  clickSel('#palette .chip[data-k="RD2"]');
+  var le = st.log[st.log.length - 1];
+  P('记录对手出牌并带手牌快照',
+    le.k === 'play' && le.a === 2 && le.s && le.s.length === 4,
+    'actor=' + le.a + ' 快照=' + (le.s || []).join('/'));
+  P('快照反映了 +2 的罚牌结果', le.s[3] === 9, '玩家4 = ' + le.s[3] + '（原 7，应 9）');
+
+  /* 12. 出完牌 → 判定本局结束 */
+  st.opp = [7, 7, 1]; st.turn = 3; st.dir = 1; st.over = -1; render();
+  clickBtn('玩家4 出牌');
+  clickSel('#palette .chip[data-k="B7"]');
+  P('对手出完最后一张即判定本局结束', st.over === 3, 'over=' + st.over + '（应为 3）');
+  P('结束事件被记录', st.log[st.log.length - 1].k === 'win');
+  P('出完即自动归档', loadGames().length === 1, loadGames().length + ' 条历史对局');
+
+  /* 13. 复盘视图 */
+  openReview(-1);
+  P('复盘弹层打开', $('revMask').classList.contains('show'));
+  var rb = $('revBody');
+  P('复盘含结果概览', rb.innerHTML.indexOf('先出完') >= 0);
+  P('复盘含时间线', rb.querySelectorAll('.tl tr').length >= st.log.length,
+    rb.querySelectorAll('.tl tr').length + ' 行');
+  P('复盘含手牌数曲线', rb.querySelectorAll('svg polyline').length === 4,
+    rb.querySelectorAll('svg polyline').length + ' 条线（应为 4）');
+  P('复盘含关键节点', rb.innerHTML.indexOf('关键节点') >= 0);
+  P('复盘含历史对局列表', rb.querySelectorAll('.game').length === 1);
+  P('复盘文本可导出 Markdown', reviewText().indexOf('# UNO 复盘') === 0 &&
+    reviewText().indexOf('## 时间线') > 0);
+  /* 切到历史局再看一次 */
+  rb.querySelectorAll('.game')[0].click();
+  P('可切到历史对局复盘', revIdx === 0 && $('revTitle').textContent.indexOf('复盘 ·') === 0,
+    $('revTitle').textContent);
+  $('revClose').click();
+  P('复盘弹层关闭', !$('revMask').classList.contains('show'));
+
+  log.unshift('界面链路验证：' + (log.length - bad) + ' / ' + log.length + ' 通过');
+  return log;
+}
+window.__unoUiTest = uiTest;
+
+/* 示例局面：地址后加 ?demo=1，直接看一个实战中的分析效果 */
+(function(){
+  var q = (location.search || '') + (location.hash || '');
+  if (q.indexOf('demo') < 0) return;
+  st = newState(4);
+  st.topCard = 'R7'; st.topColor = 'R'; st.dir = 1; st.turn = 0;
+  st.myHand = ['R1', 'R2', 'RS', 'RD2', 'B5', 'G9', 'W'];
+  st.discard = ['R7', 'B3', 'G1', 'Y4'];
+  st.opp = [6, 4, 2];
+  budget = 40000; target = 'hand'; pendingDraw = 0; advice = null;
+  undoStack = []; selected = -1;
+  render();
+  computeAdvice();
+  render();
+  $('adviceBox').scrollIntoView({ block:'start' });
+})();
+
+(function(){
+  var q = (location.search || '') + (location.hash || '');
+  if (q.indexOf('uitest') < 0) return;
+  var rows = '', bad = 0, r;
+  try {
+    r = uiTest();
+    r.forEach(function(x, i){
+      if (i === 0) return;
+      if (x.indexOf('❌') === 0) bad++;
+    });
+    r.forEach(function(x, i){
+      rows += '<div style="padding:2px 0' + (i === 0 ? ';font-weight:700;font-size:14px' : '') + '">' + x + '</div>';
+    });
+  } catch (e){
+    rows = '<span style="color:#ff9aa2">界面验证出错：' + e.message + '</span>';
+  }
+  $('adviceBox').innerHTML = '<div class="adv" style="border-color:' + (bad ? '#d93b31' : '#43b45e') + '">' +
+                             rows + '</div>';
+  renderPool();
+})();
+</script>
+</body>
+</html>
